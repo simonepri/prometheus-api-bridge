@@ -1,0 +1,73 @@
+{{- if eq .Values.collection.mode "standalone" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "prometheus-api-bridge.fullname" . }}-collector
+  labels:
+    {{- include "prometheus-api-bridge.collectorLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "prometheus-api-bridge.collectorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config-map.yaml") . | sha256sum }}
+      labels:
+        {{- include "prometheus-api-bridge.collectorSelectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "prometheus-api-bridge.collectorServiceAccountName" . }}
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          image: {{ include "prometheus-api-bridge.collectorImage" . | quote }}
+          imagePullPolicy: {{ .Values.collection.image.pullPolicy }}
+          args:
+            - --config=file:/conf/collector.yaml
+            - --config=file:/conf/standalone.yaml
+          {{- with .Values.collection.otlp.secretHeaders }}
+          env:
+            {{- range $index, $header := . }}
+            - name: OTLP_HEADER_{{ $index }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "collection.otlp.secretHeaders[].secretKeyRef.name is required" $header.secretKeyRef.name | quote }}
+                  key: {{ required "collection.otlp.secretHeaders[].secretKeyRef.key is required" $header.secretKeyRef.key | quote }}
+            {{- end }}
+          {{- end }}
+          ports:
+            - name: health
+              containerPort: 13133
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+          resources:
+            {{- toYaml .Values.collection.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "prometheus-api-bridge.fullname" . }}-collector
+{{- end }}

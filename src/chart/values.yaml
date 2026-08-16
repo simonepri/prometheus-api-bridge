@@ -1,0 +1,176 @@
+# nameOverride partially overrides the chart name used for Kubernetes resources.
+nameOverride: ""
+# fullnameOverride fully overrides generated Kubernetes resource names.
+fullnameOverride: ""
+
+# backend selects the OpenTelemetry observability system queried by the bridge.
+backend:
+  # type selects a supported backend adapter.
+  type: signoz
+  signoz:
+    # url is the base URL of the SigNoz API.
+    url: "http://signoz.observability.svc:8080"
+    # apiKeySecret references a read-only SigNoz service-account API key.
+    apiKeySecret:
+      name: prometheus-api-bridge-signoz
+      key: api-key
+# server configures the Prometheus-compatible query service.
+server:
+  image:
+    repository: ghcr.io/simonepri/prometheus-api-bridge
+    pullPolicy: IfNotPresent
+    # tag defaults to Chart.appVersion when empty.
+    tag: ""
+  replicas: 2
+  queryTimeout: 30s
+  # discoveryLookback bounds metadata discovery when callers omit start and end.
+  discoveryLookback: 1h
+  # maxQueryRange rejects unexpectedly broad range and metadata queries.
+  maxQueryRange: 720h
+  # maxConcurrentQueries bounds simultaneous backend requests per replica.
+  maxConcurrentQueries: 10
+  # maxPointsPerSeries rejects range queries whose resolution would overload the backend.
+  maxPointsPerSeries: 50000
+  # maxRequestBodyBytes bounds POST form bodies accepted by the Prometheus API.
+  maxRequestBodyBytes: 1048576
+  # maxMatchersPerRequest bounds repeated match[] selectors on discovery requests.
+  maxMatchersPerRequest: 32
+  # maxSeries bounds normalized time-series and metadata results.
+  maxSeries: 5000
+  # maxSamples bounds the total samples returned by one query.
+  maxSamples: 100000
+  # maxBackendResponseBytes bounds each upstream response before JSON decoding.
+  maxBackendResponseBytes: 4194304
+  telemetry:
+    # enabled exports bridge health metrics using OTLP/HTTP.
+    enabled: false
+    endpoint: ""
+    exportInterval: 30s
+    compression: gzip
+    # headersSecret contains an OTEL_EXPORTER_OTLP_HEADERS-compatible value.
+    headersSecret:
+      name: ""
+      key: headers
+  # auth requires a bearer token for Prometheus API requests by default.
+  auth:
+    # allowUnauthenticated must be set explicitly when a consumer cannot send
+    # authorization headers. Restrict those deployments with a NetworkPolicy.
+    allowUnauthenticated: false
+    bearerTokenSecret:
+      name: prometheus-api-bridge-auth
+      key: token
+  podAnnotations: {}
+  podLabels: {}
+  priorityClassName: ""
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  terminationGracePeriodSeconds: 30
+  strategy:
+    maxUnavailable: 0
+    maxSurge: 1
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      memory: 256Mi
+
+# service exposes the Prometheus HTTP API inside the cluster. Use an authenticated,
+# TLS-terminating ingress or service mesh when access is required outside it.
+service:
+  type: ClusterIP
+  port: 9090
+  annotations: {}
+  labels: {}
+
+# networkPolicy optionally restricts which pods can query the bridge. An empty
+# ingress list denies pod-originated ingress while preserving node health probes.
+networkPolicy:
+  enabled: false
+  ingress: []
+
+# clusterName is attached to metrics collected by this chart.
+clusterName: ""
+
+# collection optionally publishes selected Kubernetes metrics to the normal OTLP pipeline.
+collection:
+  # mode is standalone, existing, or disabled.
+  mode: disabled
+  # existing identifies the ServiceAccount of a Collector that consumes the rendered fragment.
+  existing:
+    # exporter names an exporter already configured by the existing Collector.
+    exporter: otlp_http/default
+    serviceAccount:
+      name: ""
+      namespace: ""
+  # image is used only in standalone mode.
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    pullPolicy: IfNotPresent
+    tag: "0.158.0"
+  otlp:
+    # endpoint and credentials are used only by the chart-owned standalone Collector.
+    endpoint: "http://signoz-otel-collector.observability.svc:4318"
+    insecure: true
+    # secretHeaders maps OTLP HTTP headers to Kubernetes Secret keys.
+    secretHeaders: []
+  interval: 30s
+  # extraScrapeConfigs appends standard Prometheus receiver scrape jobs. Use it
+  # for application exporters whose metrics must be queryable through the bridge.
+  extraScrapeConfigs: []
+  sources:
+    # cadvisor supplies container CPU, memory, filesystem, and network metrics.
+    cadvisor:
+      enabled: false
+      metrics:
+        - container_cpu_usage_seconds_total
+        - container_memory_working_set_bytes
+        - container_network_receive_bytes_total
+        - container_network_transmit_bytes_total
+        - container_fs_reads_bytes_total
+        - container_fs_writes_bytes_total
+    # kubelet supplies node-local volume metrics.
+    kubelet:
+      enabled: false
+      metrics:
+        - kubelet_volume_stats_used_bytes
+        - kubelet_volume_stats_capacity_bytes
+    # kubeStateMetrics supplies Kubernetes object metadata such as pod labels.
+    kubeStateMetrics:
+      enabled: false
+      # target is required when the bundled kube-state-metrics dependency is disabled.
+      target: ""
+      metrics:
+        - kube_pod_labels
+  # rbac grants kubelet API proxy access when a node source is enabled.
+  rbac:
+    create: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# kube-state-metrics is an optional upstream dependency for object metadata collection.
+kube-state-metrics:
+  enabled: false
+  fullnameOverride: ""
+  collectors:
+    - pods
+  metricLabelsAllowlist:
+    - "pods=[*]"
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi

@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["backend", "clusterName", "collection", "kube-state-metrics", "networkPolicy", "server", "service"],
+  "properties": {
+    "nameOverride": {"$ref": "#/definitions/optionalKubernetesName"},
+    "fullnameOverride": {"$ref": "#/definitions/optionalKubernetesName"},
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signoz", "type"],
+      "properties": {
+        "type": {"type": "string", "enum": ["signoz"]},
+        "signoz": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["apiKeySecret", "url"],
+          "properties": {
+            "url": {"type": "string"},
+            "apiKeySecret": {"$ref": "#/definitions/secretKeyReference"}
+          }
+        }
+      }
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["affinity", "auth", "discoveryLookback", "image", "maxBackendResponseBytes", "maxConcurrentQueries", "maxMatchersPerRequest", "maxPointsPerSeries", "maxQueryRange", "maxRequestBodyBytes", "maxSamples", "maxSeries", "nodeSelector", "podAnnotations", "podDisruptionBudget", "podLabels", "priorityClassName", "queryTimeout", "replicas", "resources", "strategy", "telemetry", "terminationGracePeriodSeconds", "tolerations", "topologySpread"],
+      "properties": {
+        "image": {"$ref": "#/definitions/image"},
+        "replicas": {"type": "integer", "minimum": 1},
+        "queryTimeout": {"type": "string", "pattern": "^[1-9][0-9]*(ms|s|m)$"},
+        "discoveryLookback": {"type": "string", "pattern": "^[1-9][0-9]*(m|h|d)$"},
+        "maxQueryRange": {"type": "string", "pattern": "^[1-9][0-9]*(m|h|d)$"},
+        "maxConcurrentQueries": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "maxPointsPerSeries": {"type": "integer", "minimum": 1, "maximum": 10000000},
+        "maxRequestBodyBytes": {"type": "integer", "minimum": 1024, "maximum": 104857600},
+        "maxMatchersPerRequest": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "maxSeries": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "maxSamples": {"type": "integer", "minimum": 1, "maximum": 10000000},
+        "maxBackendResponseBytes": {"type": "integer", "minimum": 1024, "maximum": 104857600},
+        "telemetry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["compression", "enabled", "endpoint", "exportInterval", "headersSecret"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "endpoint": {"type": "string"},
+            "exportInterval": {"type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$"},
+            "compression": {"type": "string", "enum": ["gzip", "none"]},
+            "headersSecret": {"$ref": "#/definitions/secretKeyReference"}
+          }
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowUnauthenticated", "bearerTokenSecret"],
+          "properties": {
+            "allowUnauthenticated": {"type": "boolean"},
+            "bearerTokenSecret": {"$ref": "#/definitions/secretKeyReference"}
+          }
+        },
+        "podAnnotations": {"type": "object", "additionalProperties": {"type": "string"}},
+        "podLabels": {"type": "object", "additionalProperties": {"type": "string"}},
+        "priorityClassName": {"$ref": "#/definitions/optionalKubernetesName"},
+        "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+        "tolerations": {"type": "array", "items": {"type": "object"}},
+        "affinity": {"type": "object"},
+        "terminationGracePeriodSeconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+        "strategy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxSurge", "maxUnavailable"],
+          "properties": {
+            "maxUnavailable": {"$ref": "#/definitions/intOrPercent"},
+            "maxSurge": {"$ref": "#/definitions/intOrPercent"}
+          }
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "minAvailable"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "minAvailable": {"$ref": "#/definitions/intOrPercent"}
+          }
+        },
+        "topologySpread": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "maxSkew", "whenUnsatisfiable"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "maxSkew": {"type": "integer", "minimum": 1},
+            "whenUnsatisfiable": {"type": "string", "enum": ["DoNotSchedule", "ScheduleAnyway"]}
+          }
+        },
+        "resources": {"type": "object"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["annotations", "labels", "port", "type"],
+      "properties": {
+        "type": {"type": "string", "enum": ["ClusterIP"]},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "annotations": {"type": "object", "additionalProperties": {"type": "string"}},
+        "labels": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ingress"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingress": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "clusterName": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existing", "extraScrapeConfigs", "image", "interval", "mode", "otlp", "rbac", "resources", "sources"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["disabled", "existing", "standalone"]},
+        "existing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exporter", "serviceAccount"],
+          "properties": {
+            "exporter": {"type": "string", "pattern": "^[a-z0-9_]+(/[A-Za-z0-9._-]+)?$"},
+            "serviceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "namespace"],
+              "properties": {
+                "name": {"$ref": "#/definitions/optionalKubernetesName"},
+                "namespace": {"$ref": "#/definitions/optionalKubernetesName"}
+              }
+            }
+          }
+        },
+        "image": {"$ref": "#/definitions/image"},
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["endpoint", "insecure", "secretHeaders"],
+          "properties": {
+            "endpoint": {"type": "string"},
+            "insecure": {"type": "boolean"},
+            "secretHeaders": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "secretKeyRef"],
+                "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "secretKeyRef": {"$ref": "#/definitions/secretKeyReference"}
+                }
+              }
+            }
+          }
+        },
+        "interval": {"type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$"},
+        "extraScrapeConfigs": {
+          "type": "array",
+          "items": {"type": "object", "minProperties": 1}
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cadvisor", "kubelet", "kubeStateMetrics"],
+          "properties": {
+            "cadvisor": {"$ref": "#/definitions/metricSource"},
+            "kubelet": {"$ref": "#/definitions/metricSource"},
+            "kubeStateMetrics": {"$ref": "#/definitions/kubeStateMetricSource"}
+          }
+        },
+        "rbac": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["create"],
+          "properties": {"create": {"type": "boolean"}}
+        },
+        "resources": {"type": "object"}
+      }
+    },
+    "kube-state-metrics": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"server": {"properties": {"auth": {"properties": {
+        "allowUnauthenticated": {"const": false}
+      }}}}}},
+      "then": {"properties": {"server": {"properties": {"auth": {"properties": {
+        "bearerTokenSecret": {"properties": {"name": {"minLength": 1}}}
+      }}}}}}
+    },
+    {
+      "if": {"properties": {"backend": {"properties": {"type": {"const": "signoz"}}}}},
+      "then": {
+        "properties": {
+          "backend": {"properties": {"signoz": {"properties": {
+            "url": {"minLength": 1},
+            "apiKeySecret": {"properties": {"name": {"minLength": 1}}}
+          }}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"server": {"properties": {"telemetry": {"properties": {"enabled": {"const": true}}}}}}},
+      "then": {"properties": {"server": {"properties": {"telemetry": {"properties": {"endpoint": {"minLength": 1}}}}}}}
+    },
+    {
+      "if": {"not": {"properties": {"collection": {"properties": {"mode": {"const": "disabled"}}}}}},
+      "then": {
+        "properties": {
+          "clusterName": {"minLength": 1},
+          "collection": {
+            "anyOf": [
+              {"properties": {"sources": {"anyOf": [
+                {"properties": {"cadvisor": {"properties": {"enabled": {"const": true}}}}},
+                {"properties": {"kubelet": {"properties": {"enabled": {"const": true}}}}},
+                {"properties": {"kubeStateMetrics": {"properties": {"enabled": {"const": true}}}}}
+              ]}}},
+              {"properties": {"extraScrapeConfigs": {"minItems": 1}}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"collection": {"properties": {"mode": {"const": "standalone"}}}}},
+      "then": {"properties": {"collection": {"properties": {
+        "otlp": {"properties": {"endpoint": {"minLength": 1}}}
+      }}}}
+    },
+    {
+      "if": {"properties": {"collection": {"properties": {"mode": {"const": "existing"}}}}},
+      "then": {"properties": {"collection": {"properties": {
+        "existing": {"properties": {"exporter": {"minLength": 1}}},
+        "otlp": {"properties": {"secretHeaders": {"maxItems": 0}}}
+      }}}}
+    },
+    {
+      "if": {"properties": {"collection": {"properties": {"mode": {"const": "existing"}, "rbac": {"properties": {"create": {"const": true}}}}}}},
+      "then": {"properties": {"collection": {"properties": {"existing": {"properties": {"serviceAccount": {"properties": {
+        "name": {"minLength": 1},
+        "namespace": {"minLength": 1}
+      }}}}}}}}
+    }
+  ],
+  "definitions": {
+    "intOrPercent": {
+      "oneOf": [
+        {"type": "integer", "minimum": 0},
+        {"type": "string", "pattern": "^(100|[0-9]{1,2})%$"}
+      ]
+    },
+    "optionalKubernetesName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+    },
+    "secretKeyReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "name"],
+      "properties": {
+        "name": {"$ref": "#/definitions/optionalKubernetesName"},
+        "key": {"type": "string", "minLength": 1}
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pullPolicy", "repository", "tag"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]},
+        "tag": {"type": "string"}
+      }
+    },
+    "metricSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "metrics"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "kubeStateMetricSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "metrics", "target"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "target": {"type": "string"},
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

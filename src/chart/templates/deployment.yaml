@@ -1,0 +1,158 @@
+{{- if and (not .Values.server.auth.allowUnauthenticated) (not .Values.server.auth.bearerTokenSecret.name) }}
+{{- fail "server.auth.bearerTokenSecret.name is required unless server.auth.allowUnauthenticated=true" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "prometheus-api-bridge.fullname" . }}
+  labels:
+    {{- include "prometheus-api-bridge.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.server.replicas }}
+  revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .Values.server.strategy.maxUnavailable | toJson }}
+      maxSurge: {{ .Values.server.strategy.maxSurge | toJson }}
+  selector:
+    matchLabels:
+      {{- include "prometheus-api-bridge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "prometheus-api-bridge.selectorLabels" . | nindent 8 }}
+        {{- with .Values.server.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.server.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
+      {{- with .Values.server.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.server.topologySpread.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.server.topologySpread.maxSkew }}
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: {{ .Values.server.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "prometheus-api-bridge.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bridge
+          image: {{ include "prometheus-api-bridge.image" . | quote }}
+          imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          env:
+            - name: BRIDGE_BACKEND
+              value: {{ .Values.backend.type | quote }}
+            - name: BRIDGE_LISTEN_ADDRESS
+              value: {{ printf ":%d" (int .Values.service.port) | quote }}
+            - name: BRIDGE_QUERY_TIMEOUT
+              value: {{ .Values.server.queryTimeout | quote }}
+            - name: BRIDGE_DISCOVERY_LOOKBACK
+              value: {{ .Values.server.discoveryLookback | quote }}
+            - name: BRIDGE_MAX_QUERY_RANGE
+              value: {{ .Values.server.maxQueryRange | quote }}
+            - name: BRIDGE_MAX_CONCURRENT_QUERIES
+              value: {{ printf "%d" (int .Values.server.maxConcurrentQueries) | quote }}
+            - name: BRIDGE_MAX_POINTS_PER_SERIES
+              value: {{ printf "%d" (int .Values.server.maxPointsPerSeries) | quote }}
+            - name: BRIDGE_MAX_REQUEST_BODY_BYTES
+              value: {{ printf "%d" (int .Values.server.maxRequestBodyBytes) | quote }}
+            - name: BRIDGE_MAX_MATCHERS_PER_REQUEST
+              value: {{ printf "%d" (int .Values.server.maxMatchersPerRequest) | quote }}
+            - name: BRIDGE_MAX_SERIES
+              value: {{ printf "%d" (int .Values.server.maxSeries) | quote }}
+            - name: BRIDGE_MAX_SAMPLES
+              value: {{ printf "%d" (int .Values.server.maxSamples) | quote }}
+            - name: BRIDGE_MAX_BACKEND_RESPONSE_BYTES
+              value: {{ printf "%d" (int .Values.server.maxBackendResponseBytes) | quote }}
+            - name: BRIDGE_TELEMETRY_ENABLED
+              value: {{ .Values.server.telemetry.enabled | quote }}
+            {{- if .Values.server.telemetry.enabled }}
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.instance.id=$(POD_UID),k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(POD_NAMESPACE)"
+            - name: BRIDGE_TELEMETRY_EXPORT_INTERVAL
+              value: {{ .Values.server.telemetry.exportInterval | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ required "server.telemetry.endpoint is required when telemetry is enabled" .Values.server.telemetry.endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_COMPRESSION
+              value: {{ .Values.server.telemetry.compression | quote }}
+            {{- with .Values.server.telemetry.headersSecret.name }}
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: {{ $.Values.server.telemetry.headersSecret.key | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.server.auth.bearerTokenSecret.name }}
+            - name: BRIDGE_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.server.auth.bearerTokenSecret.name | quote }}
+                  key: {{ .Values.server.auth.bearerTokenSecret.key | quote }}
+            {{- end }}
+            {{- if eq .Values.backend.type "signoz" }}
+            - name: BRIDGE_SIGNOZ_URL
+              value: {{ required "backend.signoz.url is required" .Values.backend.signoz.url | quote }}
+            - name: BRIDGE_SIGNOZ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "backend.signoz.apiKeySecret.name is required" .Values.backend.signoz.apiKeySecret.name | quote }}
+                  key: {{ .Values.backend.signoz.apiKeySecret.key | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true

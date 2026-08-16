@@ -1,0 +1,68 @@
+{{- if ne .Values.collection.mode "disabled" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "prometheus-api-bridge.fullname" . }}-collector
+  labels:
+    {{- include "prometheus-api-bridge.collectorLabels" . | nindent 4 }}
+data:
+  collector.yaml: |
+    receivers:
+      prometheus/compatibility:
+        config:
+          scrape_configs:
+            {{- include "prometheus-api-bridge.collection.cadvisor" . | nindent 12 }}
+            {{- include "prometheus-api-bridge.collection.kubelet" . | nindent 12 }}
+            {{- include "prometheus-api-bridge.collection.kubeStateMetrics" . | nindent 12 }}
+            {{- with .Values.collection.extraScrapeConfigs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+    processors:
+      batch/compatibility: {}
+      memory_limiter/compatibility:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+      transform/prometheus_labels:
+        metric_statements:
+          - context: datapoint
+            statements:
+              - set(datapoint.attributes["job"], resource.attributes["service.name"]) where resource.attributes["service.name"] != nil
+              - set(datapoint.attributes["instance"], resource.attributes["service.instance.id"]) where resource.attributes["service.instance.id"] != nil
+    {{- if eq .Values.collection.mode "standalone" }}
+    exporters:
+      otlp_http/compatibility:
+        endpoint: {{ required "collection.otlp.endpoint is required" .Values.collection.otlp.endpoint | quote }}
+        tls:
+          insecure: {{ .Values.collection.otlp.insecure }}
+        {{- with .Values.collection.otlp.secretHeaders }}
+        headers:
+          {{- range $index, $header := . }}
+          {{ $header.name | quote }}: ${env:OTLP_HEADER_{{ $index }}}
+          {{- end }}
+        {{- end }}
+        sending_queue:
+          enabled: true
+          queue_size: 2048
+        retry_on_failure:
+          enabled: true
+    {{- end }}
+    service:
+      pipelines:
+        metrics/compatibility:
+          receivers: [prometheus/compatibility]
+          processors: [memory_limiter/compatibility, transform/prometheus_labels, batch/compatibility]
+          {{- if eq .Values.collection.mode "standalone" }}
+          exporters: ["otlp_http/compatibility"]
+          {{- else }}
+          exporters: [{{ required "collection.existing.exporter is required in existing mode" .Values.collection.existing.exporter | quote }}]
+          {{- end }}
+  {{- if eq .Values.collection.mode "standalone" }}
+  standalone.yaml: |
+    extensions:
+      health_check/compatibility:
+        endpoint: 0.0.0.0:13133
+    service:
+      extensions: [health_check/compatibility]
+  {{- end }}
+{{- end }}

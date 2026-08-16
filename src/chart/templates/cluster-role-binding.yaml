@@ -1,0 +1,16 @@
+{{- if and .Values.collection.rbac.create (ne .Values.collection.mode "disabled") (or .Values.collection.sources.cadvisor.enabled .Values.collection.sources.kubelet.enabled) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "prometheus-api-bridge.fullname" . }}-collector
+  labels:
+    {{- include "prometheus-api-bridge.collectorLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "prometheus-api-bridge.fullname" . }}-collector
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "prometheus-api-bridge.rbacServiceAccountName" . }}
+    namespace: {{ include "prometheus-api-bridge.rbacServiceAccountNamespace" . }}
+{{- end }}

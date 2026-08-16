@@ -1,0 +1,35 @@
+Prometheus HTTP API endpoint:
+
+http://{{ include "prometheus-api-bridge.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+Backend: {{ .Values.backend.type }}
+
+{{- if .Values.server.auth.bearerTokenSecret.name }}
+Prometheus API requests require a bearer token from Secret
+{{ .Values.server.auth.bearerTokenSecret.name }} key {{ .Values.server.auth.bearerTokenSecret.key }}.
+{{- else }}
+WARNING: Prometheus API authentication is disabled by explicit configuration.
+Restrict access with a NetworkPolicy or equivalent network control.
+{{- end }}
+
+{{- if eq .Values.collection.mode "existing" }}
+
+The mergeable OpenTelemetry Collector configuration is stored in:
+
+ConfigMap: {{ include "prometheus-api-bridge.fullname" . }}-collector
+Key: collector.yaml
+
+Mount the key into the existing Collector and add it as another configuration source:
+
+--config=file:/etc/prometheus-api-bridge/collector.yaml
+
+The Collector distribution must include the Prometheus receiver.
+The fragment sends to the existing Collector exporter {{ .Values.collection.existing.exporter }}.
+Configure that exporter's endpoint, authentication, queues, and retries in the existing Collector.
+{{- else if eq .Values.collection.mode "standalone" }}
+
+A dedicated OpenTelemetry Collector is collecting the selected Kubernetes metric sources.
+{{- else }}
+
+Collection is disabled. The selected backend must already contain the metrics queried through this endpoint.
+{{- end }}

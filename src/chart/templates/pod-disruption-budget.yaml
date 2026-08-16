@@ -1,0 +1,13 @@
+{{- if .Values.server.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "prometheus-api-bridge.fullname" . }}
+  labels:
+    {{- include "prometheus-api-bridge.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.server.podDisruptionBudget.minAvailable | toJson }}
+  selector:
+    matchLabels:
+      {{- include "prometheus-api-bridge.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -90,6 +90,117 @@ This is the read surface required by the verified integrations. It is not the
 full Prometheus server API. Contributions that expand compatibility are
 welcome.
 
+## Install with SigNoz
+
+Requirements:
+
+| Dependency | Requirement | Tested version |
+| --- | --- | --- |
+| Kubernetes | No minimum version claimed yet | 1.36.1 |
+| Helm | 3.8 or newer for OCI chart support | 4.2.4 |
+| SigNoz | Prometheus query API and service-account API keys | 0.137.0 |
+
+The Kubernetes and SigNoz entries state the versions exercised by the live
+suite. Broader version ranges have not yet been verified.
+
+The bridge reads its SigNoz API key and its client bearer token from Kubernetes
+Secrets. For a direct Helm setup, create the namespace and Secrets with
+`kubectl`:
+
+```sh
+kubectl create namespace observability
+kubectl -n observability create secret generic prometheus-api-bridge-signoz --from-literal=api-key="$SIGNOZ_API_KEY"
+kubectl -n observability create secret generic prometheus-api-bridge-auth --from-literal=token="$BRIDGE_BEARER_TOKEN"
+```
+
+The OCI chart contains the templates, defaults, and value schema. Your
+deployment must provide the SigNoz URL and reference a credential Secret that
+already exists in the target cluster:
+
+```yaml
+backend:
+  type: signoz
+  signoz:
+    url: https://signoz.example.com
+    apiKeySecret:
+      name: prometheus-api-bridge-signoz
+      key: api-key
+server:
+  auth:
+    bearerTokenSecret:
+      name: prometheus-api-bridge-auth
+      key: token
+```
+
+If you deploy directly with Helm, save those overrides as `values.yaml` and
+install a pinned release:
+
+```sh
+helm upgrade --install prometheus-api-bridge oci://ghcr.io/simonepri/charts/prometheus-api-bridge --version 0.1.0 --namespace observability --values values.yaml
+```
+
+With Argo CD, Flux, Terraform, or another IaC system, reference the same OCI
+chart and supply the same values in its release definition. Keep the API key in
+a Kubernetes Secret or external secret manager, not in chart values.
+
+Consumers inside the cluster can now query:
+
+```text
+http://prometheus-api-bridge.observability.svc:9090
+```
+
+Verify the endpoint locally:
+
+```sh
+kubectl -n observability port-forward service/prometheus-api-bridge 9090:9090
+curl -fsS http://localhost:9090/-/ready
+curl -fsSG http://localhost:9090/api/v1/query --header "Authorization: Bearer $BRIDGE_BEARER_TOKEN" --data-urlencode 'query=up'
+```
+
+The bridge can only return metrics present in SigNoz. If the required
+Kubernetes or exporter metrics are missing, use the chart's
+[collection settings](src/chart/values.yaml). The chart can extend an existing
+Collector or install a dedicated one. The
+[existing Collector example](src/tests/collector/existing.yaml) shows how the
+generated configuration is merged into a Collector you already operate.
+
+For consumer setup, start from the links in
+[Verified integrations](#verified-integrations). Each directory contains the
+exact Helm values and Kubernetes resources deployed by the end-to-end suite.
+
+## Chart configuration
+
+The commented [`values.yaml`](src/chart/values.yaml) is the configuration
+reference. [`values.schema.json`](src/chart/values.schema.json) validates every
+supported value and rejects unknown fields.
+
+| Values | Purpose |
+| --- | --- |
+| `backend.*` | Select and authenticate the metrics backend |
+| `server.image`, `server.replicas`, `server.resources` | Configure the bridge workload |
+| `server.auth.*` | Authenticate Prometheus API clients, or explicitly acknowledge unauthenticated mode |
+| `server.telemetry.*` | Export bridge operational metrics over OTLP/HTTP |
+| `server.queryTimeout`, `server.max*` | Bound query cost, concurrency, and response size |
+| `server.strategy`, `server.podDisruptionBudget`, `server.topologySpread` | Configure rollout and availability behavior |
+| `service.*` | Configure the Prometheus-compatible Service |
+| `networkPolicy.*` | Restrict pod access to an explicitly selected set of consumers |
+| `collection.*` | Disable collection, extend an existing Collector, or install a dedicated Collector |
+| `kube-state-metrics.*` | Configure the optional kube-state-metrics dependency |
+
+Use a read-only backend credential. Configured empty or unreadable Secrets fail
+startup rather than silently disabling authentication. Health endpoints remain
+unauthenticated.
+
+Bearer authentication is enabled by default. For a consumer that cannot attach
+authorization headers, set `server.auth.allowUnauthenticated=true`, clear
+`server.auth.bearerTokenSecret.name`, and restrict the bridge with
+`networkPolicy.ingress` or an equivalent network control. The chart intentionally
+exposes only a `ClusterIP`; put an authenticated, TLS-terminating ingress or
+service mesh in front of it rather than changing the Service to public access.
+
+Bridge telemetry uses the `prometheus_api_bridge_*` namespace. Query
+expressions and metric names are never exported as telemetry attributes.
+
 ## Authors
 
 - **Simone Primarosa** - [simonepri](https://github.com/simonepri)
