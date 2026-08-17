@@ -286,6 +286,17 @@ spec:
         cluster: e2e
         entrypoint: helm
         args:
+          - repo
+          - add
+          - prometheus-community
+          - https://prometheus-community.github.io/helm-charts
+          - --force-update
+        timeout: 1m
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: helm
+        args:
           - dependency
           - build
           - $BRIDGE_E2E_REPO_DIR/src/chart
