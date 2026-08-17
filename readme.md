@@ -7,6 +7,54 @@
 <h1 align="center">Prometheus API Bridge</h1>
 
 <p align="center">
+  <!-- Implementation -->
+  <!-- Language - Go -->
+  <a href="https://go.dev/">
+    <img src="https://img.shields.io/badge/language-Go-00ADD8?logo=go&amp;logoColor=white" alt="Written in Go">
+  </a>
+  <!-- Telemetry - OpenTelemetry -->
+  <a href="https://opentelemetry.io/">
+    <img src="https://img.shields.io/badge/telemetry-OpenTelemetry-000000?logo=opentelemetry&amp;logoColor=white" alt="OpenTelemetry telemetry">
+  </a>
+  <!-- Toolchain - mise -->
+  <a href="https://mise.jdx.dev/">
+    <img src="https://img.shields.io/badge/toolchain-mise-8B5CF6?logo=iterm2&amp;logoColor=white" alt="mise toolchain">
+  </a>
+  <br>
+  <!-- Verification -->
+  <!-- CI - GitHub Actions -->
+  <a href="https://github.com/simonepri/prometheus-api-bridge/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/simonepri/prometheus-api-bridge/ci.yml?branch=main&amp;label=CI&amp;logo=githubactions&amp;logoColor=white" alt="CI status">
+  </a>
+  <!-- E2E tests - Chainsaw -->
+  <a href="https://kyverno.github.io/chainsaw/">
+    <img src="https://img.shields.io/badge/K8s_E2E-Chainsaw-4B5563?logo=kubernetes&amp;logoColor=white" alt="Chainsaw Kubernetes end-to-end tests">
+  </a>
+  <!-- Test cluster - Kind -->
+  <a href="https://kind.sigs.k8s.io/">
+    <img src="https://img.shields.io/badge/test_cluster-Kind-326CE5?logo=kubernetes&amp;logoColor=white" alt="Kind Kubernetes test cluster">
+  </a>
+  <br>
+  <!-- Distribution -->
+  <!-- Release - Release Please -->
+  <a href="https://github.com/googleapis/release-please">
+    <img src="https://img.shields.io/badge/released_with-Release_Please-4285F4?logo=google&amp;logoColor=white" alt="Released with Release Please">
+  </a>
+  <!-- Packaging - Helm -->
+  <a href="https://helm.sh/">
+    <img src="https://img.shields.io/badge/packaging-Helm_OCI-0F1689?logo=helm&amp;logoColor=white" alt="Helm OCI chart">
+  </a>
+  <!-- Container - Docker -->
+  <a href="https://www.docker.com/">
+    <img src="https://img.shields.io/badge/container-Docker-2496ED?logo=docker&amp;logoColor=white" alt="Docker container image">
+  </a>
+  <!-- License - MIT -->
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/simonepri/prometheus-api-bridge" alt="MIT license">
+  </a>
+</p>
+
+<p align="center">
   🦫 Let Prometheus-only tools query OpenTelemetry metrics without running Prometheus.
 </p>
 
@@ -68,11 +116,17 @@ for Kubernetes metrics missing from the normal pipeline.
 
 | Backend | Status | Query path |
 | --- | --- | --- |
-| SigNoz | Supported and tested live | Original PromQL through the SigNoz Prometheus query API |
+| SigNoz | Supported and tested live | Original PromQL through SigNoz's Prometheus-compatible `/api/v1/query*` endpoints |
 
 The backend interface is extensible, but new adapters must preserve the
 Prometheus semantics they claim. Contributions adding new backends are
 welcome.
+
+The SigNoz adapter currently requires
+[`/api/v1/query`](https://github.com/SigNoz/signoz/blob/v0.137.0/pkg/query-service/app/http_handler.go#L486)
+and
+[`/api/v1/query_range`](https://github.com/SigNoz/signoz/blob/v0.137.0/pkg/query-service/app/http_handler.go#L485).
+Both routes are present and tested in SigNoz 0.137.0.
 
 ### Prometheus API
 
@@ -94,19 +148,21 @@ welcome.
 
 The project is tested end to end with common software that expects Prometheus.
 Each integration uses the tool's normal Prometheus configuration and the same
-bridge URL. The linked directories contain the exact Helm values, Kubernetes
-resources, and Chainsaw assertions used by CI. There are no consumer-specific
-bridge modes.
+bridge URL. There are no consumer-specific bridge modes.
 
-| Tool | Prometheus integration | What it enables |
-| --- | --- | --- |
-| [Headlamp](src/tests/headlamp/) | Prometheus plugin | Workload CPU, memory, network, filesystem, and volume charts |
-| [Vertical Pod Autoscaler](src/tests/vpa/) | Prometheus history provider | Resource recommendations from durable usage history |
-| [KEDA](src/tests/keda/) | Prometheus scaler | Event-driven scaling from OpenTelemetry metrics |
-| [Grafana](src/tests/grafana/) | Prometheus data source | Dashboards and ad hoc queries over OpenTelemetry metrics |
-| [Horizontal Pod Autoscaler](src/tests/hpa/) | Prometheus Adapter through the Custom Metrics API | Kubernetes autoscaling from custom OpenTelemetry metrics |
-| [Argo Rollouts](src/tests/argo-rollouts/) | Prometheus analysis provider | Metric-driven rollout analysis and promotion |
-| [OpenCost](src/tests/opencost/) | External Prometheus endpoint | Kubernetes cost allocation without a Prometheus server |
+This table is a compatibility overview. After installing the bridge, use
+**View configuration** for the exact Helm values, Kubernetes resources, and
+Chainsaw assertions behind each tested integration.
+
+| Tool | Configuration provided | What it enables | Reference |
+| --- | --- | --- | --- |
+| Headlamp | [Prometheus plugin](https://github.com/headlamp-k8s/plugins/tree/main/prometheus) pointing at the bridge | Workload CPU, memory, network, filesystem, and volume charts | [View configuration](src/tests/headlamp/) |
+| Vertical Pod Autoscaler | [VPA Prometheus history provider](https://github.com/kubernetes/autoscaler/blob/master/vertical-pod-autoscaler/docs/components.md#running-the-recommender) pointing at the bridge | Resource recommendations from durable usage history | [View configuration](src/tests/vpa/) |
+| KEDA | [KEDA Prometheus scaler](https://keda.sh/docs/2.21/scalers/prometheus/) with its server address set to the bridge | Event-driven scaling from OpenTelemetry metrics | [View configuration](src/tests/keda/) |
+| Grafana | [Grafana Prometheus data source](https://grafana.com/docs/grafana/latest/datasources/prometheus/configure/) provisioned with the bridge URL | Dashboards and ad hoc queries over OpenTelemetry metrics | [View configuration](src/tests/grafana/) |
+| Horizontal Pod Autoscaler | [Prometheus Adapter Helm values](https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-adapter) and [metric rules](https://github.com/kubernetes-sigs/prometheus-adapter/blob/master/docs/config.md) targeting the bridge | Kubernetes autoscaling from custom OpenTelemetry metrics | [View configuration](src/tests/hpa/) |
+| Argo Rollouts | [Argo Rollouts Prometheus analysis provider](https://argo-rollouts.readthedocs.io/en/stable/analysis/prometheus/) pointing at the bridge | Metric-driven rollout analysis and promotion | [View configuration](src/tests/argo-rollouts/) |
+| OpenCost | [OpenCost Prometheus data source](https://github.com/opencost/opencost-helm-chart/blob/main/charts/opencost/README.md) configured with the bridge URL | Kubernetes cost allocation without a Prometheus server | [View configuration](src/tests/opencost/) |
 
 Every integration above is exercised by the
 [end-to-end suite](src/tests/suite/chainsaw-test.yaml) with
@@ -122,10 +178,14 @@ Requirements:
 | --- | --- | --- |
 | Kubernetes | No minimum version claimed yet | 1.36.1 |
 | Helm | 3.8 or newer for OCI chart support | 4.2.4 |
-| SigNoz | Prometheus query API and service-account API keys | 0.137.0 |
+| SigNoz | Prometheus-compatible query endpoints and service-account API keys | 0.137.0 |
 
 The Kubernetes and SigNoz entries state the versions exercised by the live
 suite. Broader version ranges have not yet been verified.
+
+At runtime, the bridge needs network access to the SigNoz query API and a
+read-only service-account API key. An OTLP/HTTP endpoint is optional and is
+used only to export the bridge's own operational metrics.
 
 The bridge reads its SigNoz API key and its client bearer token from Kubernetes
 Secrets. For a direct Helm setup, create the namespace and Secrets with
@@ -188,11 +248,15 @@ Collector or install a dedicated one. The
 [existing Collector example](src/tests/collector/existing.yaml) shows how the
 generated configuration is merged into a Collector you already operate.
 
-For consumer setup, start from the links in
-[Verified integrations](#verified-integrations). Each directory contains the
-exact Helm values and Kubernetes resources deployed by the end-to-end suite.
+## Connect a consumer
 
-## Chart configuration
+Once the bridge readiness endpoint responds, choose a consumer from the
+[verified integrations](#verified-integrations) and use its **View
+configuration** link as the starting point for your deployment. Each reference
+shows the consumer's bridge URL, required metrics, and supporting Kubernetes
+resources.
+
+## Bridge chart configuration
 
 The commented [`values.yaml`](src/chart/values.yaml) is the configuration
 reference. [`values.schema.json`](src/chart/values.schema.json) validates every
