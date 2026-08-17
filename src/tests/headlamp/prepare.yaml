@@ -1,0 +1,106 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: prepare-headlamp-metrics
+spec:
+  try:
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/collector/existing.yaml
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - prometheus-api-bridge-headlamp
+          - $BRIDGE_E2E_REPO_DIR/src/chart
+          - --namespace
+          - observability
+          - --set-string
+          - fullnameOverride=prometheus-api-bridge-headlamp
+          - --set-string
+          - clusterName=$BRIDGE_E2E_METRIC_CLUSTER_NAME
+          - --set-string
+          - collection.mode=existing
+          - --set-string
+          - collection.existing.serviceAccount.name=otel-existing-collector
+          - --set-string
+          - collection.existing.serviceAccount.namespace=observability
+          - --set-string
+          - collection.existing.exporter=otlp_http/bridge
+          - --set-string
+          - server.image.repository=prometheus-api-bridge
+          - --set-string
+          - server.image.tag=e2e
+          - --set-string
+          - server.image.pullPolicy=Never
+          - --set-string
+          - backend.signoz.url=http://signoz.observability.svc:8080
+          - --set-string
+          - backend.signoz.apiKeySecret.name=prometheus-api-bridge-signoz
+          - --set-string
+          - service.labels.headlamp-prometheus=true
+          - --set
+          - collection.sources.cadvisor.enabled=true
+          - --set
+          - collection.sources.kubelet.enabled=true
+          - --set
+          - collection.sources.kubeStateMetrics.enabled=true
+          - --set-string
+          - collection.sources.kubeStateMetrics.target=prometheus-api-bridge-kube-state-metrics.observability.svc:8080
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/common/bridge-values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: otel-existing-collector
+            namespace: observability
+          status:
+            readyReplicas: 1
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/headlamp/workload.yaml
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: headlamp-probe
+            namespace: bridge-test
+          status:
+            phase: Running
+            (conditions[?type == 'Ready'] | [0].status): "True"
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: headlamp-data
+            namespace: bridge-test
+          status:
+            phase: Bound
+  catch:
+    - events:
+        namespace: bridge-test
+    - events:
+        namespace: observability
+    - podLogs:
+        namespace: bridge-test
+        selector: app=headlamp-probe
+    - podLogs:
+        namespace: observability
+        selector: app=otel-existing-collector

@@ -1,0 +1,72 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: create-cluster
+spec:
+  try:
+    - command:
+        entrypoint: mkdir
+        args:
+          - -p
+          - $BRIDGE_E2E_WORK_DIR
+    - command:
+        entrypoint: kind
+        args:
+          - delete
+          - cluster
+          - --name
+          - $BRIDGE_E2E_CLUSTER_NAME
+    - command:
+        entrypoint: docker
+        args:
+          - build
+          - --tag
+          - prometheus-api-bridge:e2e
+          - --file
+          - $BRIDGE_E2E_REPO_DIR/src/Dockerfile
+          - $BRIDGE_E2E_REPO_DIR/src
+    - command:
+        entrypoint: kind
+        args:
+          - create
+          - cluster
+          - --name
+          - $BRIDGE_E2E_CLUSTER_NAME
+          - --image
+          - kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+          - --kubeconfig
+          - $BRIDGE_E2E_KUBECONFIG
+          - --wait
+          - 120s
+        timeout: 3m
+    - command:
+        entrypoint: kind
+        args:
+          - load
+          - docker-image
+          - --name
+          - $BRIDGE_E2E_CLUSTER_NAME
+          - prometheus-api-bridge:e2e
+        timeout: 2m
+  catch:
+    - command:
+        entrypoint: kind
+        args:
+          - export
+          - logs
+          - --name
+          - $BRIDGE_E2E_CLUSTER_NAME
+          - $BRIDGE_E2E_WORK_DIR/kind-logs
+        timeout: 2m
+  cleanup:
+    - command:
+        entrypoint: env
+        args:
+          - $BRIDGE_E2E_CLEANUP_COMMAND
+          - delete
+          - cluster
+          - --name
+          - $BRIDGE_E2E_CLUSTER_NAME
+        timeout: 2m

@@ -1,0 +1,28 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: opencost
+spec:
+  try:
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/opencost/services/http:opencost:9003/proxy/allocation?window=10m&aggregate=namespace&resolution=1m
+        timeout: 2m
+        check:
+          (json_parse($stdout).code): 200
+          (length(json_parse($stdout).data) > `0`): true
+          (contains($stdout, '"bridge-test"')): true
+  catch:
+    - events:
+        namespace: opencost
+    - podLogs:
+        namespace: opencost
+        selector: app.kubernetes.io/name=opencost
+    - podLogs:
+        namespace: observability
+        selector: app.kubernetes.io/instance=prometheus-api-bridge

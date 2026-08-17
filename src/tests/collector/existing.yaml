@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-existing-collector
+  namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-existing-collector
+  namespace: observability
+data:
+  base.yaml: |
+    receivers:
+      otlp/existing:
+        protocols:
+          grpc:
+            endpoint: 127.0.0.1:4317
+    exporters:
+      debug/existing: {}
+      otlp_http/bridge:
+        endpoint: http://signoz-otel-collector.observability.svc:4318
+        tls:
+          insecure: true
+        sending_queue:
+          enabled: true
+        retry_on_failure:
+          enabled: true
+    extensions:
+      health_check/existing:
+        endpoint: 0.0.0.0:13133
+    service:
+      extensions: [health_check/existing]
+      pipelines:
+        metrics/existing:
+          receivers: [otlp/existing]
+          exporters: [debug/existing]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-existing-collector
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-existing-collector
+  template:
+    metadata:
+      labels:
+        app: otel-existing-collector
+    spec:
+      serviceAccountName: otel-existing-collector
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.158.0
+          args:
+            - --config=file:/conf/base.yaml
+            - --config=file:/bridge/collector.yaml
+          ports:
+            - name: health
+              containerPort: 13133
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: base
+              mountPath: /conf
+              readOnly: true
+            - name: bridge
+              mountPath: /bridge
+              readOnly: true
+      volumes:
+        - name: base
+          configMap:
+            name: otel-existing-collector
+        - name: bridge
+          configMap:
+            name: prometheus-api-bridge-headlamp-collector

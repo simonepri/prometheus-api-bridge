@@ -1,0 +1,56 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: prometheus-api-consumers
+spec:
+  description: All Prometheus API consumers share one Kind cluster and one OpenTelemetry backend.
+  steps:
+    - use:
+        template: ../templates/create-cluster.yaml
+    - use:
+        template: ../templates/platform.yaml
+    - clusters: &e2e-clusters
+        e2e:
+          kubeconfig: ../../../.local/e2e/kubeconfig
+      cluster: e2e
+      use:
+        template: ../opencost/prepare.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../headlamp/prepare.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../keda/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../grafana/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../hpa/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../argo-rollouts/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../telemetry/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../headlamp/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../opencost/steps.yaml
+    # VPA deliberately disables Metrics Server, so it must remain last.
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../vpa/steps.yaml

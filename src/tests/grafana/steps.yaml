@@ -1,0 +1,66 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: grafana
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - grafana
+          - grafana
+          - --repo
+          - https://grafana-community.github.io/helm-charts
+          - --namespace
+          - grafana
+          - --create-namespace
+          - --version
+          - 12.10.4
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/grafana/values.yaml
+          - --wait
+          - --timeout
+          - 12m
+        timeout: 13m
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/health
+        check:
+          (json_parse($stdout).database): ok
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/uid/prometheus-api-bridge/health
+        check:
+          ($error == null): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/proxy/uid/prometheus-api-bridge/api/v1/label/__name__/values?match%5B%5D=bridge_test_queue_depth
+        check:
+          (contains(json_parse($stdout).data, 'bridge_test_queue_depth')): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/proxy/uid/prometheus-api-bridge/api/v1/query?query=bridge_test_queue_depth
+        check:
+          (json_parse($stdout).data.resultType): vector
+  catch:
+    - events:
+        namespace: grafana
+    - podLogs:
+        namespace: grafana
+        selector: app.kubernetes.io/name=grafana

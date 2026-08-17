@@ -1,0 +1,28 @@
+config:
+  staticPlugins:
+    enabled: true
+
+# Browser requests are authorized with the user's bearer token. The Headlamp
+# pod itself does not need the chart's default cluster-admin binding.
+clusterRoleBinding:
+  create: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsGroup: 101
+  runAsNonRoot: true
+  runAsUser: 100
+  seccompProfile:
+    type: RuntimeDefault

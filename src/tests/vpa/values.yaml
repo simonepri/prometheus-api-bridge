@@ -1,0 +1,32 @@
+fullnameOverride: vpa
+
+admissionController:
+  enabled: false
+  podDisruptionBudget:
+    enabled: false
+
+recommender:
+  replicas: 1
+  image:
+    tag: 1.7.1
+  podDisruptionBudget:
+    enabled: false
+  extraArgs:
+    - --storage=prometheus
+    - --prometheus-address=http://prometheus-api-bridge.observability.svc:9090
+    - --prometheus-cadvisor-job-name=prometheus-api-bridge-cadvisor-prometheus-api-bridge-e2e
+    - --container-namespace-label=namespace
+    - --container-pod-name-label=pod
+    - --container-name-label=container
+    - --metric-for-pod-labels=kube_pod_labels{cluster="prometheus-api-bridge-e2e"}[30m]
+    - --pod-namespace-label=namespace
+    - --pod-name-label=pod
+    - --pod-label-prefix=label_
+    - --history-length=30m
+    - --history-resolution=1m
+    - --recommender-interval=5s
+
+updater:
+  enabled: false
+  podDisruptionBudget:
+    enabled: false

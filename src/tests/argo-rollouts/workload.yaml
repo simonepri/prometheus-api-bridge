@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisRun
+metadata:
+  name: bridge-metric
+  namespace: bridge-test
+spec:
+  metrics:
+    - name: queue-depth
+      interval: 5s
+      count: 1
+      successCondition: result[0] >= 5
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus-api-bridge.observability.svc:9090
+          query: bridge_test_queue_depth

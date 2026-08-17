@@ -90,6 +90,30 @@ This is the read surface required by the verified integrations. It is not the
 full Prometheus server API. Contributions that expand compatibility are
 welcome.
 
+### Verified integrations
+
+The project is tested end to end with common software that expects Prometheus.
+Each integration uses the tool's normal Prometheus configuration and the same
+bridge URL. The linked directories contain the exact Helm values, Kubernetes
+resources, and Chainsaw assertions used by CI. There are no consumer-specific
+bridge modes.
+
+| Tool | Prometheus integration | What it enables |
+| --- | --- | --- |
+| [Headlamp](src/tests/headlamp/) | Prometheus plugin | Workload CPU, memory, network, filesystem, and volume charts |
+| [Vertical Pod Autoscaler](src/tests/vpa/) | Prometheus history provider | Resource recommendations from durable usage history |
+| [KEDA](src/tests/keda/) | Prometheus scaler | Event-driven scaling from OpenTelemetry metrics |
+| [Grafana](src/tests/grafana/) | Prometheus data source | Dashboards and ad hoc queries over OpenTelemetry metrics |
+| [Horizontal Pod Autoscaler](src/tests/hpa/) | Prometheus Adapter through the Custom Metrics API | Kubernetes autoscaling from custom OpenTelemetry metrics |
+| [Argo Rollouts](src/tests/argo-rollouts/) | Prometheus analysis provider | Metric-driven rollout analysis and promotion |
+| [OpenCost](src/tests/opencost/) | External Prometheus endpoint | Kubernetes cost allocation without a Prometheus server |
+
+Every integration above is exercised by the
+[end-to-end suite](src/tests/suite/chainsaw-test.yaml) with
+[Kind](https://kind.sigs.k8s.io/) and
+[Chainsaw](https://kyverno.io/docs/subprojects/chainsaw/) against a real SigNoz
+installation.
+
 ## Install with SigNoz
 
 Requirements:

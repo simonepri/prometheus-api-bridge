@@ -1,0 +1,30 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: telemetry
+spec:
+  try:
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/observability/services/http:prometheus-api-bridge:9090/proxy/api/v1/query?query=bridge_test_queue_depth%7Bnamespace%3D%22bridge-test%22%7D
+        check:
+          (to_number(json_parse($stdout).data.result[0].value[1]) >= `10`): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/observability/services/http:prometheus-api-bridge:9090/proxy/api/v1/query?query=prometheus_api_bridge_http_server_requests
+        check:
+          (to_number(json_parse($stdout).data.result[0].value[1]) >= `1`): true
+  catch:
+    - events:
+        namespace: observability
+    - podLogs:
+        namespace: observability
+        selector: app.kubernetes.io/instance=prometheus-api-bridge

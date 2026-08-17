@@ -1,0 +1,32 @@
+server:
+  replicas: 1
+  # The single-node Kind environment is isolated and several verified
+  # Prometheus consumers cannot attach arbitrary authorization headers.
+  auth:
+    allowUnauthenticated: true
+    bearerTokenSecret:
+      name: ""
+      key: token
+  podDisruptionBudget:
+    enabled: false
+  topologySpread:
+    enabled: false
+
+collection:
+  interval: 5s
+  extraScrapeConfigs:
+    - job_name: opencost
+      honor_labels: true
+      scrape_interval: 5s
+      scrape_timeout: 4s
+      metrics_path: /metrics
+      static_configs:
+        - targets:
+            - opencost.opencost.svc:9003
+      relabel_configs:
+        - target_label: cluster
+          replacement: prometheus-api-bridge-e2e
+  sources:
+    kubeStateMetrics:
+      metrics:
+        - kube_pod_.*

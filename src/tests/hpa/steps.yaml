@@ -1,0 +1,57 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: hpa
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - prometheus-adapter
+          - prometheus-adapter
+          - --repo
+          - https://prometheus-community.github.io/helm-charts
+          - --namespace
+          - custom-metrics
+          - --create-namespace
+          - --version
+          - 5.3.0
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/hpa/values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/hpa/workload.yaml
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: hpa-worker
+            namespace: bridge-test
+          status:
+            (readyReplicas >= `2`): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /apis/custom.metrics.k8s.io/v1beta1
+        check:
+          (contains($stdout, 'bridge_test_queue_depth')): true
+  catch:
+    - events:
+        namespace: custom-metrics
+    - podLogs:
+        namespace: custom-metrics
+        selector: app.kubernetes.io/name=prometheus-adapter

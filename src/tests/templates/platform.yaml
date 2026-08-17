@@ -1,0 +1,441 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: install-platform
+spec:
+  try:
+    - apply:
+        clusters: &e2e-clusters
+          e2e:
+            kubeconfig: ../../../.local/e2e/kubeconfig
+        cluster: e2e
+        resource:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: observability
+    - apply:
+        clusters: *e2e-clusters
+        cluster: e2e
+        resource:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: signoz-bootstrap
+            namespace: observability
+          stringData:
+            jwt-secret: prometheus-api-bridge-e2e-jwt-secret-32-bytes
+            root-password: BridgeTest123$
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - signoz
+          - signoz
+          - --repo
+          - https://charts.signoz.io
+          - --namespace
+          - observability
+          - --version
+          - 0.137.0
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/common/signoz-values.yaml
+          - --set-string
+          - signoz.env.SIGNOZ_USER_ROOT_EMAIL=admin@bridge.test
+          - --wait
+          - --timeout
+          - 12m
+        timeout: 13m
+    - apply:
+        clusters: *e2e-clusters
+        cluster: e2e
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: signoz-api-client
+            namespace: observability
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.21.0
+                command:
+                  - sleep
+                  - "3600"
+                resources:
+                  requests:
+                    cpu: 5m
+                    memory: 8Mi
+                  limits:
+                    memory: 32Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
+                  runAsUser: 100
+                  seccompProfile:
+                    type: RuntimeDefault
+            restartPolicy: Never
+    - assert:
+        clusters: *e2e-clusters
+        cluster: e2e
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: signoz-api-client
+            namespace: observability
+          status:
+            phase: Running
+            (conditions[?type == 'Ready'] | [0].status): "True"
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        args:
+          - exec
+          - --namespace
+          - observability
+          - signoz-api-client
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - http://signoz.observability.svc:8080/api/v2/sessions/context?email=admin%40bridge.test&ref=http%3A%2F%2Fsignoz.observability.svc%3A8080
+        outputs:
+          - name: orgId
+            value: (json_parse($stdout).data.orgs[0].id)
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        skipCommandOutput: true
+        skipLogOutput: true
+        env:
+          - name: ORG_ID
+            value: ($orgId)
+        args:
+          - exec
+          - --namespace
+          - observability
+          - signoz-api-client
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - --header
+          - 'Content-Type: application/json'
+          - --data
+          - '{"email":"admin@bridge.test","password":"BridgeTest123$","orgId":"$ORG_ID"}'
+          - http://signoz.observability.svc:8080/api/v2/sessions/email_password
+        outputs:
+          - name: accessToken
+            value: (json_parse($stdout).data.accessToken)
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        skipCommandOutput: true
+        skipLogOutput: true
+        env:
+          - name: ACCESS_TOKEN
+            value: ($accessToken)
+        args:
+          - exec
+          - --namespace
+          - observability
+          - signoz-api-client
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - --header
+          - 'Content-Type: application/json'
+          - --header
+          - 'Authorization: Bearer $ACCESS_TOKEN'
+          - --data
+          - '{"name":"prometheus-api-bridge"}'
+          - http://signoz.observability.svc:8080/api/v1/service_accounts
+        outputs:
+          - name: serviceAccountId
+            value: (json_parse($stdout).data.id)
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        skipCommandOutput: true
+        skipLogOutput: true
+        env:
+          - name: ACCESS_TOKEN
+            value: ($accessToken)
+        args:
+          - exec
+          - --namespace
+          - observability
+          - signoz-api-client
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - --header
+          - 'Authorization: Bearer $ACCESS_TOKEN'
+          - http://signoz.observability.svc:8080/api/v1/roles
+        outputs:
+          - name: viewerRoleId
+            value: (json_parse($stdout).data[?name == 'signoz-viewer'] | [0].id)
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        skipCommandOutput: true
+        skipLogOutput: true
+        env:
+          - name: ACCESS_TOKEN
+            value: ($accessToken)
+          - name: SERVICE_ACCOUNT_ID
+            value: ($serviceAccountId)
+          - name: VIEWER_ROLE_ID
+            value: ($viewerRoleId)
+        args:
+          - exec
+          - --namespace
+          - observability
+          - signoz-api-client
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - --header
+          - 'Content-Type: application/json'
+          - --header
+          - 'Authorization: Bearer $ACCESS_TOKEN'
+          - --data
+          - '{"id":"$VIEWER_ROLE_ID"}'
+          - http://signoz.observability.svc:8080/api/v1/service_accounts/$SERVICE_ACCOUNT_ID/roles
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        skipCommandOutput: true
+        skipLogOutput: true
+        env:
+          - name: ACCESS_TOKEN
+            value: ($accessToken)
+          - name: SERVICE_ACCOUNT_ID
+            value: ($serviceAccountId)
+        args:
+          - exec
+          - --namespace
+          - observability
+          - signoz-api-client
+          - --
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - --request
+          - POST
+          - --header
+          - 'Content-Type: application/json'
+          - --header
+          - 'Authorization: Bearer $ACCESS_TOKEN'
+          - --data
+          - '{"name":"e2e","expiresAt":0}'
+          - http://signoz.observability.svc:8080/api/v1/service_accounts/$SERVICE_ACCOUNT_ID/keys
+        outputs:
+          - name: signozApiKey
+            value: (json_parse($stdout).data.key)
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        skipCommandOutput: true
+        skipLogOutput: true
+        env:
+          - name: SIGNOZ_API_KEY
+            value: ($signozApiKey)
+        args:
+          - create
+          - secret
+          - generic
+          - prometheus-api-bridge-signoz
+          - --namespace
+          - observability
+          - --from-literal=api-key=$SIGNOZ_API_KEY
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: helm
+        args:
+          - dependency
+          - build
+          - $BRIDGE_E2E_REPO_DIR/src/chart
+        timeout: 3m
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - prometheus-api-bridge
+          - $BRIDGE_E2E_REPO_DIR/src/chart
+          - --namespace
+          - observability
+          - --set-string
+          - fullnameOverride=prometheus-api-bridge
+          - --set-string
+          - clusterName=$BRIDGE_E2E_METRIC_CLUSTER_NAME
+          - --set-string
+          - collection.mode=$BRIDGE_E2E_COLLECTION_MODE
+          - --set-string
+          - collection.existing.serviceAccount.name=otel-existing-collector
+          - --set-string
+          - collection.existing.serviceAccount.namespace=observability
+          - --set-string
+          - collection.existing.exporter=otlp_http/bridge
+          - --set-string
+          - server.image.repository=prometheus-api-bridge
+          - --set-string
+          - server.image.tag=e2e
+          - --set-string
+          - server.image.pullPolicy=Never
+          - --set-string
+          - backend.signoz.url=http://signoz.observability.svc:8080
+          - --set-string
+          - backend.signoz.apiKeySecret.name=prometheus-api-bridge-signoz
+          - --set-string
+          - collection.otlp.endpoint=http://signoz-otel-collector.observability.svc:4318
+          - --set
+          - server.telemetry.enabled=true
+          - --set-string
+          - server.telemetry.endpoint=http://signoz-otel-collector.observability.svc:4318
+          - --set-string
+          - server.telemetry.exportInterval=5s
+          - --set
+          - collection.sources.cadvisor.enabled=true
+          - --set
+          - collection.sources.kubelet.enabled=true
+          - --set
+          - collection.sources.kubeStateMetrics.enabled=true
+          - --set
+          - kube-state-metrics.enabled=true
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/common/bridge-values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: docker
+        args:
+          - cp
+          - $BRIDGE_E2E_CLUSTER_NAME-control-plane:/var/lib/kubelet/pki/kubelet.crt
+          - $BRIDGE_E2E_WORK_DIR/kubelet-ca.crt
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        args:
+          - create
+          - configmap
+          - metrics-server-kubelet-ca
+          - --namespace
+          - kube-system
+          - --from-file=ca.crt=$BRIDGE_E2E_WORK_DIR/kubelet-ca.crt
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - metrics-server
+          - metrics-server
+          - --repo
+          - https://kubernetes-sigs.github.io/metrics-server/
+          - --namespace
+          - kube-system
+          - --version
+          - 3.13.1
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/common/metrics-server-values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - assert:
+        clusters: *e2e-clusters
+        cluster: e2e
+        resource:
+          apiVersion: apiregistration.k8s.io/v1
+          kind: APIService
+          metadata:
+            name: v1beta1.metrics.k8s.io
+          status:
+            (conditions[?type == 'Available'] | [0].status): "True"
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /apis/metrics.k8s.io/v1beta1/nodes
+        check:
+          (length(json_parse($stdout).items) > `0`): true
+    - command:
+        clusters: *e2e-clusters
+        cluster: e2e
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/metrics/workload.yaml
+    - assert:
+        clusters: *e2e-clusters
+        cluster: e2e
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: otel-metric-emitter
+            namespace: bridge-test
+          status:
+            phase: Running
+            (conditions[?type == 'Ready'] | [0].status): "True"
+  catch:
+    - events:
+        clusters: *e2e-clusters
+        cluster: e2e
+    - podLogs:
+        clusters: *e2e-clusters
+        cluster: e2e
+        namespace: observability
+        selector: app.kubernetes.io/instance=prometheus-api-bridge
+    - podLogs:
+        clusters: *e2e-clusters
+        cluster: e2e
+        namespace: observability
+        selector: app.kubernetes.io/instance=signoz

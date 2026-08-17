@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-worker
+  namespace: bridge-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hpa-worker
+  template:
+    metadata:
+      labels:
+        app: hpa-worker
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.38.0
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 4Mi
+            limits:
+              memory: 16Mi
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-worker
+  namespace: bridge-test
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-worker
+  minReplicas: 1
+  maxReplicas: 3
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+  metrics:
+    - type: Object
+      object:
+        describedObject:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: hpa-worker
+        metric:
+          name: bridge_test_queue_depth
+        target:
+          type: Value
+          value: "2"

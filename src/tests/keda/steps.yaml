@@ -1,0 +1,54 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: keda
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - keda
+          - keda
+          - --repo
+          - https://kedacore.github.io/charts
+          - --namespace
+          - keda
+          - --create-namespace
+          - --version
+          - 2.20.2
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/keda/workload.yaml
+    - assert:
+        resource:
+          apiVersion: keda.sh/v1alpha1
+          kind: ScaledObject
+          metadata:
+            name: keda-worker
+            namespace: bridge-test
+          status:
+            (conditions[?type == 'Active'] | [0].status): "True"
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: keda-worker
+            namespace: bridge-test
+          status:
+            (readyReplicas >= `2`): true
+  catch:
+    - events: {}
+    - podLogs:
+        selector: app.kubernetes.io/name=keda-operator

@@ -1,0 +1,27 @@
+prometheus:
+  url: http://prometheus-api-bridge.observability.svc
+  port: 9090
+rules:
+  default: false
+  custom:
+    - seriesQuery: 'bridge_test_queue_depth{namespace!="",deployment!=""}'
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          deployment:
+            group: apps
+            resource: deployments
+      name:
+        matches: ^bridge_test_queue_depth$
+        as: bridge_test_queue_depth
+      metricsQuery: 'max(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+extraArguments:
+  - --metrics-relist-interval=5s
+  - --metrics-max-age=5m
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

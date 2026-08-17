@@ -1,0 +1,14 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/configuration-chainsaw-v1alpha2.json
+apiVersion: chainsaw.kyverno.io/v1alpha2
+kind: Configuration
+metadata:
+  name: prometheus-api-bridge
+spec:
+  timeouts:
+    apply: 2m
+    assert: 5m
+    cleanup: 2m
+    delete: 2m
+    error: 2m
+    exec: 5m

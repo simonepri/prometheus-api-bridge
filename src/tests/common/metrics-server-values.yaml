@@ -1,0 +1,17 @@
+defaultArgs:
+  - --cert-dir=/tmp
+  - --secure-port=10250
+  - --kubelet-preferred-address-types=Hostname,InternalDNS,InternalIP
+  - --kubelet-use-node-status-port
+  - --metric-resolution=15s
+  - --kubelet-certificate-authority=/etc/kubelet-ca/ca.crt
+
+extraVolumes:
+  - name: kubelet-ca
+    configMap:
+      name: metrics-server-kubelet-ca
+
+extraVolumeMounts:
+  - name: kubelet-ca
+    mountPath: /etc/kubelet-ca
+    readOnly: true

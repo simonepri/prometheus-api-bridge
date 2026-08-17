@@ -1,0 +1,247 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: vpa
+spec:
+  try:
+    - command:
+        entrypoint: mkdir
+        args:
+          - -p
+          - $BRIDGE_E2E_VPA_REPO_DIR
+    - command:
+        entrypoint: git
+        args:
+          - init
+          - --quiet
+          - $BRIDGE_E2E_VPA_REPO_DIR
+    - command:
+        entrypoint: git
+        args:
+          - -C
+          - $BRIDGE_E2E_VPA_REPO_DIR
+          - fetch
+          - --quiet
+          - --depth
+          - "1"
+          - --force
+          - https://github.com/kubernetes/autoscaler.git
+          - refs/tags/vertical-pod-autoscaler-1.7.1
+        timeout: 3m
+    - command:
+        entrypoint: git
+        args:
+          - -C
+          - $BRIDGE_E2E_VPA_REPO_DIR
+          - checkout
+          - --quiet
+          - --force
+          - FETCH_HEAD
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - vpa
+          - $BRIDGE_E2E_VPA_REPO_DIR/vertical-pod-autoscaler/charts/vertical-pod-autoscaler
+          - --namespace
+          - vpa-system
+          - --create-namespace
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/vpa/values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/vpa/workload.yaml
+    - assert:
+        resource:
+          apiVersion: autoscaling.k8s.io/v1
+          kind: VerticalPodAutoscaler
+          metadata:
+            name: cpu-burner
+            namespace: bridge-test
+          status:
+            recommendation:
+              containerRecommendations:
+                - containerName: burner
+                  target:
+                    (cpu != null): true
+                    (memory != null): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - scale
+          - deployment/cpu-burner
+          - --namespace
+          - bridge-test
+          - --replicas
+          - "0"
+    - command:
+        entrypoint: kubectl
+        args:
+          - wait
+          - pod
+          - --namespace
+          - bridge-test
+          - --selector
+          - app=cpu-burner
+          - --for
+          - delete
+          - --timeout
+          - 2m
+        timeout: 3m
+    - command:
+        entrypoint: kubectl
+        args:
+          - scale
+          - deployment/metrics-server
+          - --namespace
+          - kube-system
+          - --replicas
+          - "0"
+    - command:
+        entrypoint: kubectl
+        args:
+          - wait
+          - pod
+          - --namespace
+          - kube-system
+          - --selector
+          - app.kubernetes.io/name=metrics-server
+          - --for
+          - delete
+          - --timeout
+          - 2m
+        timeout: 3m
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /apis/metrics.k8s.io/v1beta1/nodes
+        check:
+          ($error != null): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - scale
+          - deployment/vpa-recommender
+          - --namespace
+          - vpa-system
+          - --replicas
+          - "0"
+    - command:
+        entrypoint: kubectl
+        args:
+          - wait
+          - pod
+          - --namespace
+          - vpa-system
+          - --selector
+          - app.kubernetes.io/component=recommender
+          - --for
+          - delete
+          - --timeout
+          - 2m
+        timeout: 3m
+    - command:
+        entrypoint: kubectl
+        args:
+          - patch
+          - verticalpodautoscaler
+          - cpu-burner
+          - --namespace
+          - bridge-test
+          - --subresource
+          - status
+          - --type
+          - merge
+          - --patch
+          - '{"status":null}'
+    - command:
+        entrypoint: kubectl
+        args:
+          - scale
+          - deployment/vpa-recommender
+          - --namespace
+          - vpa-system
+          - --replicas
+          - "1"
+    - assert:
+        resource:
+          apiVersion: autoscaling.k8s.io/v1
+          kind: VerticalPodAutoscaler
+          metadata:
+            name: cpu-burner
+            namespace: bridge-test
+          status:
+            recommendation:
+              containerRecommendations:
+                - containerName: burner
+                  target:
+                    (cpu != null): true
+                    (memory != null): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - logs
+          - deployment/vpa-recommender
+          - --namespace
+          - vpa-system
+        check:
+          (contains($stdout, 'Initializing VPA from history provider')): true
+    # Restore live resource metrics so a retained demo cluster remains usable.
+    - command:
+        entrypoint: kubectl
+        args:
+          - scale
+          - deployment/metrics-server
+          - --namespace
+          - kube-system
+          - --replicas
+          - "1"
+    - command:
+        entrypoint: kubectl
+        args:
+          - rollout
+          - status
+          - deployment/metrics-server
+          - --namespace
+          - kube-system
+          - --timeout
+          - 2m
+        timeout: 3m
+    - command:
+        entrypoint: kubectl
+        args:
+          - scale
+          - deployment/cpu-burner
+          - --namespace
+          - bridge-test
+          - --replicas
+          - "1"
+    - command:
+        entrypoint: kubectl
+        args:
+          - rollout
+          - status
+          - deployment/cpu-burner
+          - --namespace
+          - bridge-test
+          - --timeout
+          - 2m
+        timeout: 3m
+  catch:
+    - events:
+        namespace: vpa-system
+    - podLogs:
+        namespace: vpa-system
+        selector: app.kubernetes.io/component=recommender

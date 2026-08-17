@@ -1,0 +1,47 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: argo-rollouts
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - argo-rollouts
+          - argo-rollouts
+          - --repo
+          - https://argoproj.github.io/argo-helm
+          - --namespace
+          - argo-rollouts
+          - --create-namespace
+          - --version
+          - 2.41.1
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/argo-rollouts/workload.yaml
+    - assert:
+        resource:
+          apiVersion: argoproj.io/v1alpha1
+          kind: AnalysisRun
+          metadata:
+            name: bridge-metric
+            namespace: bridge-test
+          status:
+            phase: Successful
+  catch:
+    - events:
+        namespace: argo-rollouts
+    - podLogs:
+        namespace: argo-rollouts
+        selector: app.kubernetes.io/name=argo-rollouts

@@ -1,0 +1,187 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: headlamp
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - headlamp
+          - headlamp
+          - --repo
+          - https://kubernetes-sigs.github.io/headlamp/
+          - --namespace
+          - headlamp
+          - --create-namespace
+          - --version
+          - 0.44.0
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/headlamp/values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/headlamp/services/http:headlamp:80/proxy/plugins
+        check:
+          (contains($stdout, 'prometheus')): true
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: headlamp-probe
+            namespace: bridge-test
+          status:
+            phase: Running
+            (conditions[?type == 'Ready'] | [0].status): "True"
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: headlamp-data
+            namespace: bridge-test
+          status:
+            phase: Bound
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: prometheus-api-bridge-headlamp
+            namespace: observability
+            labels:
+              headlamp-prometheus: "true"
+    # Follow the same public discovery contract as Headlamp's Prometheus plugin:
+    # list Services by label, select the first endpoint, then use service proxy.
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/services?labelSelector=headlamp-prometheus%3Dtrue
+        check:
+          (length(json_parse($stdout).items)): 1
+        outputs:
+          - name: prometheusName
+            value: (json_parse($stdout).items[0].metadata.name)
+          - name: prometheusNamespace
+            value: (json_parse($stdout).items[0].metadata.namespace)
+          - name: prometheusPort
+            value: (to_string(json_parse($stdout).items[0].spec.ports[0].port))
+    - command:
+        entrypoint: date
+        args:
+          - +%s
+        outputs:
+          - name: queryEnd
+            value: (trim_space($stdout))
+    - command:
+        entrypoint: expr
+        env:
+          - name: QUERY_END
+            value: ($queryEnd)
+        args:
+          - $QUERY_END
+          - "-"
+          - "60"
+        outputs:
+          - name: queryStart
+            value: (trim_space($stdout))
+    - command:
+        entrypoint: kubectl
+        env: &headlamp-query-env
+          - name: QUERY_START
+            value: ($queryStart)
+          - name: QUERY_END
+            value: ($queryEnd)
+          - name: PROMETHEUS_NAME
+            value: ($prometheusName)
+          - name: PROMETHEUS_NAMESPACE
+            value: ($prometheusNamespace)
+          - name: PROMETHEUS_PORT
+            value: ($prometheusPort)
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28rate%28container_cpu_usage_seconds_total%7Bcontainer%21%3D%22%22%2Cnamespace%3D%22bridge-test%22%2Cpod%3D%22headlamp-probe%22%7D%5B1m%5D%29%29%20by%20%28pod%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: &headlamp-query-check
+          (length(json_parse($stdout).data.result) > `0`): true
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28container_memory_working_set_bytes%7Bcontainer%21%3D%22%22%2Cnamespace%3D%22bridge-test%22%2Cpod%3D~%22headlamp-probe%22%7D%29%20by%20%28pod%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28rate%28container_network_receive_bytes_total%7Bnamespace%3D%22bridge-test%22%2Cpod%3D%22headlamp-probe%22%7D%5B1m%5D%29%29%20by%20%28pod%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28rate%28container_network_transmit_bytes_total%7Bnamespace%3D%22bridge-test%22%2Cpod%3D%22headlamp-probe%22%7D%5B1m%5D%29%29%20by%20%28pod%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28rate%28container_fs_reads_bytes_total%7Bnamespace%3D%22bridge-test%22%2Cpod%3D%22headlamp-probe%22%7D%5B1m%5D%29%29%20by%20%28pod%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28rate%28container_fs_writes_bytes_total%7Bnamespace%3D%22bridge-test%22%2Cpod%3D%22headlamp-probe%22%7D%5B1m%5D%29%29%20by%20%28pod%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28kubelet_volume_stats_used_bytes%7Bnamespace%3D%22bridge-test%22%2Cpersistentvolumeclaim%3D%22headlamp-data%22%7D%29%20by%20%28persistentvolumeclaim%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+    - command:
+        entrypoint: kubectl
+        env: *headlamp-query-env
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/$PROMETHEUS_NAMESPACE/services/$PROMETHEUS_NAME:$PROMETHEUS_PORT/proxy/api/v1/query_range?query=sum%28kubelet_volume_stats_capacity_bytes%7Bnamespace%3D%22bridge-test%22%2Cpersistentvolumeclaim%3D%22headlamp-data%22%7D%29%20by%20%28persistentvolumeclaim%2Cnamespace%29&start=$QUERY_START&end=$QUERY_END&step=15
+        check: *headlamp-query-check
+  catch:
+    - events:
+        namespace: headlamp
+    - podLogs:
+        namespace: headlamp
+        selector: app.kubernetes.io/name=headlamp
+    - podLogs:
+        namespace: observability
+        selector: app=otel-existing-collector
+    - podLogs:
+        namespace: observability
+        selector: app.kubernetes.io/instance=prometheus-api-bridge-headlamp

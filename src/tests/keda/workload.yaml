@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keda-worker
+  namespace: bridge-test
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: keda-worker
+  template:
+    metadata:
+      labels:
+        app: keda-worker
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.38.0
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 4Mi
+            limits:
+              memory: 16Mi
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: keda-worker
+  namespace: bridge-test
+spec:
+  scaleTargetRef:
+    name: keda-worker
+  pollingInterval: 5
+  cooldownPeriod: 10
+  minReplicaCount: 0
+  maxReplicaCount: 3
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-api-bridge.observability.svc:9090
+        metricName: bridge_test_queue_depth
+        query: bridge_test_queue_depth
+        threshold: "2"
+        activationThreshold: "1"

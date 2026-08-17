@@ -1,0 +1,43 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: opencost-prepare
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - opencost
+          - opencost
+          - --repo
+          - https://opencost.github.io/opencost-helm-chart
+          - --namespace
+          - opencost
+          - --create-namespace
+          - --version
+          - 2.5.29
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/opencost/values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: opencost
+            namespace: opencost
+          status:
+            (readyReplicas >= `1`): true
+  catch:
+    - events:
+        namespace: opencost
+    - podLogs:
+        namespace: opencost
+        selector: app.kubernetes.io/name=opencost

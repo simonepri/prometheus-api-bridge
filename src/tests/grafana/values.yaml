@@ -1,0 +1,27 @@
+adminUser: admin
+adminPassword: bridge-e2e
+testFramework:
+  enabled: false
+grafana.ini:
+  auth.anonymous:
+    enabled: true
+    org_role: Admin
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus API Bridge
+        uid: prometheus-api-bridge
+        type: prometheus
+        access: proxy
+        url: http://prometheus-api-bridge.observability.svc:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          httpMethod: POST
+resources:
+  requests:
+    cpu: 25m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

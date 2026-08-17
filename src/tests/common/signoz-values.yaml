@@ -1,0 +1,49 @@
+global:
+  cloud: other
+  storageClass: standard
+
+clickhouse:
+  fullnameOverride: signoz-clickhouse
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: standard
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  zookeeper:
+    persistence:
+      enabled: true
+      size: 1Gi
+      storageClass: standard
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+signoz:
+  fullnameOverride: signoz
+  env:
+    SIGNOZ_TOKENIZER_JWT_SECRET:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-bootstrap
+          key: jwt-secret
+    SIGNOZ_USER_ROOT_ENABLED: "true"
+    SIGNOZ_USER_ROOT_ORG_NAME: prometheus-api-bridge-e2e
+    SIGNOZ_USER_ROOT_PASSWORD:
+      valueFrom:
+        secretKeyRef:
+          name: signoz-bootstrap
+          key: root-password
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+otelCollector:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
