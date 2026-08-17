@@ -347,6 +347,10 @@ Delete the retained environment when finished:
 mise run demo-down
 ```
 
+Release Please creates version tags without a changelog file. A tag publishes
+multi-architecture, provenance-attested images and the OCI Helm chart from the
+exact tagged commit.
+
 ## Authors
 
 - **Simone Primarosa** - [simonepri](https://github.com/simonepri)

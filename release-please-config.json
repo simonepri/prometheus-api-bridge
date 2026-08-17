@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "group-pull-request-title-pattern": "chore: release ${version}",
+  "packages": {
+    ".": {
+      "component": "prometheus-api-bridge",
+      "extra-files": [
+        {
+          "jsonpath": "$.version",
+          "path": "src/chart/Chart.yaml",
+          "type": "yaml"
+        },
+        {
+          "jsonpath": "$.appVersion",
+          "path": "src/chart/Chart.yaml",
+          "type": "yaml"
+        }
+      ],
+      "include-component-in-tag": false,
+      "package-name": "prometheus-api-bridge",
+      "release-type": "simple",
+      "skip-changelog": true,
+      "version-file": "version.txt"
+    }
+  }
+}
