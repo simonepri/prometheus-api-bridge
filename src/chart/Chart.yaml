@@ -1,16 +1,19 @@
 apiVersion: v2
 name: prometheus-api-bridge
-description: Prometheus HTTP API compatibility for OpenTelemetry-native observability backends
+description: >-
+  Prometheus HTTP API compatibility for OpenTelemetry-native observability
+  backends
 type: application
 version: 0.1.0
-appVersion: "0.1.0"
+appVersion: 0.1.0
 keywords:
   - kubernetes
   - opentelemetry
   - prometheus
   - signoz
 home: https://github.com/simonepri/prometheus-api-bridge
-icon: https://raw.githubusercontent.com/simonepri/prometheus-api-bridge/main/assets/logo.png
+icon: >-
+  https://raw.githubusercontent.com/simonepri/prometheus-api-bridge/main/assets/logo.png
 maintainers:
   - name: simonepri
     url: https://github.com/simonepri
