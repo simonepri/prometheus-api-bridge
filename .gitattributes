@@ -7,7 +7,7 @@ assets/*.png binary
 # Generated lock and release-state files should not be hand-merged.
 **/Chart.lock merge=binary linguist-language=YAML linguist-generated=true
 **/go.sum merge=binary linguist-language=Go-Checksums linguist-generated=true
-.release-please-manifest.json merge=binary linguist-language=JSON linguist-generated=true
+.config/release-please-manifest.json merge=binary linguist-language=JSON linguist-generated=true
 version.txt merge=binary linguist-generated=true
 src/chart/charts/*.tgz binary linguist-vendored=true
 

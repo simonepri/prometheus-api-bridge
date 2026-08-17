@@ -313,8 +313,8 @@ from `~/.cache/prometheus-api-bridge` locally and in CI.
 
 ```text
 prometheus-api-bridge/
+├── .config/               # Linter and release configuration
 ├── .github/               # CI and release workflows
-├── .linters/              # Shared linter configuration
 ├── mise.toml              # Tool versions and public development tasks
 └── src/                   # Go module and shipped project artifacts
     ├── bridge/            # Go server implementation

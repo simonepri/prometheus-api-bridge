@@ -59,7 +59,7 @@ run = "hadolint src/Dockerfile"
 [tasks.lint-go]
 description = "Run strict Go linting"
 dir = "src"
-run = "golangci-lint run --config ../.linters/golangci.yaml ./..."
+run = "golangci-lint run --config ../.config/golangci.yaml ./..."
 
 [tasks.lint-json-schema]
 description = "Validate JSON configuration against its schemas"
@@ -68,8 +68,8 @@ run = [
   "curl --fail --silent --show-error --location https://raw.githubusercontent.com/googleapis/release-please/v17.6.1/schemas/config.json --output .local/cache/json-schema/release-please-config.json",
   "curl --fail --silent --show-error --location https://raw.githubusercontent.com/googleapis/release-please/v17.6.1/schemas/manifest.json --output .local/cache/json-schema/release-please-manifest.json",
   "curl --fail --silent --show-error --location https://json-schema.org/draft-07/schema --output .local/cache/json-schema/draft-07.json",
-  "jsonschema-cli validate .local/cache/json-schema/release-please-config.json -i release-please-config.json",
-  "jsonschema-cli validate .local/cache/json-schema/release-please-manifest.json -i .release-please-manifest.json",
+  "jsonschema-cli validate .local/cache/json-schema/release-please-config.json -i .config/release-please-config.json",
+  "jsonschema-cli validate .local/cache/json-schema/release-please-manifest.json -i .config/release-please-manifest.json",
   "jsonschema-cli validate .local/cache/json-schema/draft-07.json -i src/chart/values.schema.json",
 ]
 
@@ -79,7 +79,7 @@ run = "go -C src mod tidy -diff"
 
 [tasks.lint-secrets]
 description = "Scan authored files for committed secrets"
-run = "gitleaks dir . --config .linters/gitleaks.toml --no-banner --redact"
+run = "gitleaks dir . --config .config/gitleaks.toml --no-banner --redact"
 
 [tasks.lint-vulnerabilities]
 description = "Check reachable Go code for known vulnerabilities"
@@ -88,7 +88,7 @@ run = "govulncheck ./..."
 
 [tasks.lint-yaml]
 description = "Lint authored, non-templated YAML"
-run = "yamllint --config-file .linters/yamllint.yaml .github/workflows src/tests src/chart/Chart.yaml src/chart/values.yaml"
+run = "yamllint --config-file .config/yamllint.yaml .github/workflows src/tests src/chart/Chart.yaml src/chart/values.yaml"
 
 [tasks.lint]
 description = "Run every static repository check"
