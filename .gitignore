@@ -1,0 +1,5 @@
+.local/
+.plans/
+dist/
+src/chart/charts/*.tgz
+rendered.yaml

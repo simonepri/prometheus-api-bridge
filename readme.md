@@ -225,6 +225,128 @@ service mesh in front of it rather than changing the Service to public access.
 Bridge telemetry uses the `prometheus_api_bridge_*` namespace. Query
 expressions and metric names are never exported as telemetry attributes.
 
+## Development and release
+
+Mise is the public task interface:
+
+```sh
+mise install
+mise run verify
+mise run e2e
+```
+
+`mise run verify` runs formatting checks, strict Go linting, race-enabled unit
+tests, Helm schema and render checks, chart packaging, Chainsaw validation,
+JSON Schema validation, Dockerfile linting, GitHub Actions linting and security
+analysis, YAML linting, secret scanning, and reachable Go vulnerability checks.
+
+The integration suite is organized under `src/tests/<consumer>`. One shared
+Kind and SigNoz environment verifies the complete matrix sequentially and is
+deleted on success or failure. Pinned Helm artifacts and VPA source are reused
+from `~/.cache/prometheus-api-bridge` locally and in CI.
+
+### Repository layout
+
+```text
+prometheus-api-bridge/
+├── .github/               # CI and release workflows
+├── .linters/              # Shared linter configuration
+├── mise.toml              # Tool versions and public development tasks
+└── src/                   # Go module and shipped project artifacts
+    ├── bridge/            # Go server implementation
+    │   ├── main.go        # Executable configuration and lifecycle
+    │   ├── api/           # Prometheus-compatible HTTP API
+    │   ├── backend/       # Query contract and backend adapters
+    │   │   └── signoz/    # SigNoz backend adapter
+    │   └── telemetry/     # Native OTLP bridge telemetry
+    ├── chart/             # Production Helm chart
+    ├── tests/             # Shared Kind and Chainsaw integration suite
+    ├── Dockerfile         # Production bridge container image
+    ├── go.mod
+    └── go.sum
+```
+
+The diagram below shows how a Prometheus query reaches the metrics backend and
+how the result returns to the consumer:
+
+```mermaid
+flowchart LR
+    Consumer[Prometheus API consumer] -- Prometheus HTTP request --> API[api]
+    API -- Prometheus JSON response --> Consumer
+    API -- backend-neutral query --> Adapter[backend adapter]
+    Adapter -- normalized result --> API
+    Adapter -- backend-native query --> Backend[metrics backend, e.g. SigNoz]
+    Backend -- backend-native response --> Adapter
+    Main[bridge executable] -. constructs .-> API
+    Main -. configures .-> Adapter
+    Main -. configures .-> Telemetry[OTLP telemetry]
+    API -- records query outcomes --> Telemetry
+```
+
+- `bridge` contains the complete Go server. Its `main.go` loads configuration
+  and credentials, selects a backend, starts the API, and handles shutdown.
+- `bridge/api` implements the supported Prometheus HTTP endpoints, validation,
+  authentication, response encoding, and operational limits.
+- `bridge/backend` defines normalized query and series types. Backend-specific
+  clients implement that Go interface under `bridge/backend/<name>`, and
+  `main.go` injects the selected client into the API. The interface adds no
+  runtime network hop.
+- `bridge/telemetry` implements the API observer used to export query counts,
+  latency, errors, and concurrency over OTLP. It never queries the backend.
+- `chart` packages the server, collection configuration, RBAC, and optional
+  kube-state-metrics dependency for production installation.
+- `tests/<consumer>` colocates each verified integration's Chainsaw steps,
+  Kubernetes resources, and Helm values. All consumers share one Kind cluster.
+
+Go tests stay beside the package they verify, following the standard
+`file.go` and `file_test.go` convention. `src` is both the Go module root and
+the container build context, so application code and shipped deployment
+artifacts have one source boundary.
+
+### Demo the integrations
+
+The demo creates one Kind cluster, installs SigNoz and every verified
+integration, runs the end-to-end checks, and leaves the working cluster
+available for inspection:
+
+```sh
+mise run demo-up
+```
+
+Start each HTTP endpoint in a separate terminal:
+
+| Service | Command | Local endpoint |
+| --- | --- | --- |
+| Bridge | `mise run demo-bridge` | `http://localhost:9090` |
+| SigNoz | `mise run demo-signoz` | `http://localhost:3301` |
+| Headlamp | `mise run demo-headlamp` | `http://localhost:4466` |
+| Grafana | `mise run demo-grafana` | `http://localhost:3000` |
+| OpenCost API | `mise run demo-opencost` | `http://localhost:9003` |
+
+`demo-headlamp` prints a short-lived viewer token before starting its port
+forward. The SigNoz demo login is `admin@bridge.test` with password
+`BridgeTest123$`. Grafana permits anonymous access in the demo only.
+
+Useful requests:
+
+```sh
+curl -fsSG http://localhost:9090/api/v1/query --data-urlencode 'query=bridge_test_queue_depth'
+curl -fsS 'http://localhost:9003/allocation?window=10m&aggregate=namespace&resolution=1m'
+```
+
+KEDA, HPA, VPA, and Argo Rollouts are controllers rather than standalone HTTP
+servers. Inspect their verified resources in the same cluster:
+
+```sh
+mise run demo-status
+```
+
+Delete the retained environment when finished:
+
+```sh
+mise run demo-down
+```
+
 ## Authors
 
 - **Simone Primarosa** - [simonepri](https://github.com/simonepri)

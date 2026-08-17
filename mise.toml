@@ -1,0 +1,181 @@
+[tools]
+actionlint = "1.7.12"
+"aqua:kyverno/chainsaw" = "0.2.15"
+"cargo:jsonschema-cli" = "0.49.9"
+colima = "0.10.3"
+docker-cli = "29.7.2"
+gitleaks = "8.30.1"
+go = "1.26.6"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.7.0"
+golangci-lint = "2.12.2"
+hadolint = "2.15.1"
+helm = "4.2.4"
+kind = "0.32.0"
+kubeconform = "0.8.0"
+kubectl = "1.36.3"
+lima = "2.2.0"
+"asdf:ericcornelissen/asdf-yamllint" = "1.38.0"
+shellcheck = "0.11.0"
+zizmor = "1.29.0"
+
+[env]
+HELM_CACHE_HOME = "{{env.HOME}}/.cache/prometheus-api-bridge/helm"
+HELM_CONFIG_HOME = "{{config_root}}/.local/state/helm"
+HELM_DATA_HOME = "{{config_root}}/.local/share/helm"
+BRIDGE_E2E_REPO_DIR = "{{config_root}}"
+BRIDGE_E2E_KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig"
+BRIDGE_E2E_CLEANUP_COMMAND = "kind"
+BRIDGE_E2E_METRIC_CLUSTER_NAME = "prometheus-api-bridge-e2e"
+BRIDGE_E2E_VPA_REPO_DIR = "{{env.HOME}}/.cache/prometheus-api-bridge/vpa/vertical-pod-autoscaler-1.7.1"
+
+[tasks.format]
+description = "Format Go source"
+run = "go -C src fmt ./..."
+
+[tasks.lint-actions]
+description = "Lint GitHub Actions workflows and embedded shell"
+run = "actionlint -shellcheck shellcheck"
+
+[tasks.lint-actions-security]
+description = "Audit GitHub Actions workflows for security issues"
+run = "zizmor .github/workflows"
+
+[tasks.lint-chart]
+description = "Lint, render, schema-check, and package the Helm chart"
+run = "go -C src test -count=1 -v -run '^TestStatic$' ./tests"
+
+[tasks.lint-chainsaw]
+description = "Validate Chainsaw configuration and consumer tests"
+env = { BRIDGE_E2E_CLUSTER_NAME = "parse-only", BRIDGE_E2E_COLLECTION_MODE = "standalone", BRIDGE_E2E_WORK_DIR = "{{config_root}}/.local/e2e/parse-only" }
+run = [
+  "chainsaw lint configuration --file src/tests/chainsaw.yaml",
+  "chainsaw test --no-cluster --config src/tests/chainsaw.yaml --test-dir src/tests --include-test-regex '^does-not-match$'",
+]
+
+[tasks.lint-container]
+description = "Lint the bridge Dockerfile"
+run = "hadolint src/Dockerfile"
+
+[tasks.lint-go]
+description = "Run strict Go linting"
+dir = "src"
+run = "golangci-lint run --config ../.linters/golangci.yaml ./..."
+
+[tasks.lint-json-schema]
+description = "Validate JSON configuration against its schemas"
+run = [
+  "mkdir -p .local/cache/json-schema",
+  "curl --fail --silent --show-error --location https://raw.githubusercontent.com/googleapis/release-please/v17.6.1/schemas/config.json --output .local/cache/json-schema/release-please-config.json",
+  "curl --fail --silent --show-error --location https://raw.githubusercontent.com/googleapis/release-please/v17.6.1/schemas/manifest.json --output .local/cache/json-schema/release-please-manifest.json",
+  "curl --fail --silent --show-error --location https://json-schema.org/draft-07/schema --output .local/cache/json-schema/draft-07.json",
+  "jsonschema-cli validate .local/cache/json-schema/release-please-config.json -i release-please-config.json",
+  "jsonschema-cli validate .local/cache/json-schema/release-please-manifest.json -i .release-please-manifest.json",
+  "jsonschema-cli validate .local/cache/json-schema/draft-07.json -i src/chart/values.schema.json",
+]
+
+[tasks.lint-mod]
+description = "Verify the Go module graph is tidy"
+run = "go -C src mod tidy -diff"
+
+[tasks.lint-secrets]
+description = "Scan authored files for committed secrets"
+run = "gitleaks dir . --config .linters/gitleaks.toml --no-banner --redact"
+
+[tasks.lint-vulnerabilities]
+description = "Check reachable Go code for known vulnerabilities"
+dir = "src"
+run = "govulncheck ./..."
+
+[tasks.lint-yaml]
+description = "Lint authored, non-templated YAML"
+run = "yamllint --config-file .linters/yamllint.yaml .github/workflows src/tests src/chart/Chart.yaml src/chart/values.yaml"
+
+[tasks.lint]
+description = "Run every static repository check"
+depends = [
+  "lint-actions",
+  "lint-actions-security",
+  "lint-chainsaw",
+  "lint-chart",
+  "lint-container",
+  "lint-go",
+  "lint-json-schema",
+  "lint-mod",
+  "lint-secrets",
+  "lint-vulnerabilities",
+  "lint-yaml",
+]
+
+[tasks.test]
+description = "Run race-enabled Go unit tests"
+run = "go -C src test -race -count=1 -cover ./bridge/..."
+
+[tasks.verify]
+description = "Run the complete release readiness gate without live clusters"
+run = [
+  "mise run lint",
+  "mise run test",
+]
+
+[tasks.build]
+description = "Build the bridge container image"
+run = "docker build --tag prometheus-api-bridge:local --file src/Dockerfile src"
+
+[tasks.e2e]
+description = "Verify every consumer against one shared Kind and SigNoz environment"
+env = { BRIDGE_E2E_CLUSTER_NAME = "prometheus-api-bridge-chainsaw", BRIDGE_E2E_COLLECTION_MODE = "standalone", BRIDGE_E2E_WORK_DIR = "{{config_root}}/.local/e2e/shared" }
+run = "chainsaw test --no-cluster --skip-delete --config src/tests/chainsaw.yaml --test-dir src/tests/suite --report-format JUNIT-STEP --report-path $BRIDGE_E2E_WORK_DIR"
+
+[tasks.demo-up]
+description = "Verify every consumer once and retain the shared demo cluster"
+env = { BRIDGE_E2E_CLUSTER_NAME = "prometheus-api-bridge-demo", BRIDGE_E2E_CLEANUP_COMMAND = "true", BRIDGE_E2E_COLLECTION_MODE = "standalone", BRIDGE_E2E_WORK_DIR = "{{config_root}}/.local/e2e/demo", KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = "chainsaw test --no-cluster --skip-delete --config src/tests/chainsaw.yaml --test-dir src/tests/suite --report-format JUNIT-STEP --report-path $BRIDGE_E2E_WORK_DIR"
+
+[tasks.demo-bridge]
+description = "Serve the verified Prometheus HTTP API on http://localhost:9090"
+env = { KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = "kubectl --namespace observability port-forward service/prometheus-api-bridge 9090:9090"
+
+[tasks.demo-signoz]
+description = "Serve the verified SigNoz UI on http://localhost:3301"
+env = { KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = "kubectl --namespace observability port-forward service/signoz 3301:8080"
+
+[tasks.demo-headlamp]
+description = "Print a viewer token and serve the verified Headlamp UI on http://localhost:4466"
+env = { KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = [
+  "kubectl apply --filename src/tests/headlamp/inspection-access.yaml",
+  "kubectl --namespace headlamp create token headlamp-inspection-viewer --duration 24h",
+  "kubectl --namespace headlamp port-forward service/headlamp 4466:80",
+]
+
+[tasks.demo-grafana]
+description = "Serve the verified Grafana UI on http://localhost:3000"
+env = { KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = "kubectl --namespace grafana port-forward service/grafana 3000:80"
+
+[tasks.demo-opencost]
+description = "Serve the verified OpenCost API on http://localhost:9003"
+env = { KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = "kubectl --namespace opencost port-forward service/opencost 9003:9003"
+
+[tasks.demo-status]
+description = "Show the verified controller-based consumer resources"
+env = { KUBECONFIG = "{{config_root}}/.local/e2e/kubeconfig" }
+run = [
+  "kubectl --namespace bridge-test get scaledobject,horizontalpodautoscaler,analysisrun,verticalpodautoscaler",
+  "kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1",
+]
+
+[tasks.demo-down]
+description = "Delete the retained shared demo cluster"
+run = "kind delete cluster --name prometheus-api-bridge-demo"
+
+[tasks.ci]
+description = "Run the complete local and CI verification contract"
+run = [
+  "mise run lint",
+  "mise run test",
+  "mise run e2e",
+]

@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignored local runtime state"
+paths = ['''^\.local/''']

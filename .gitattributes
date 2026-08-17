@@ -1,2 +1,17 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalize authored text files to LF.
+* text=auto eol=lf
+
+# Repository artwork is authored binary content.
+assets/*.png binary
+
+# Generated lock and release-state files should not be hand-merged.
+**/Chart.lock merge=binary linguist-language=YAML linguist-generated=true
+**/go.sum merge=binary linguist-language=Go-Checksums linguist-generated=true
+.release-please-manifest.json merge=binary linguist-language=JSON linguist-generated=true
+version.txt merge=binary linguist-generated=true
+src/chart/charts/*.tgz binary linguist-vendored=true
+
+# Generated or vendored build artifacts remain classified correctly if force-added.
+.local/** linguist-generated=true
+dist/** linguist-generated=true
+rendered.yaml linguist-generated=true
