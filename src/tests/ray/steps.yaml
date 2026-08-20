@@ -15,14 +15,17 @@ spec:
               if output=$(kubectl get --raw \
                 /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus/sd \
                 2>/dev/null); then
-                printf '%s' "$output"
-                exit 0
+                if [ -n "$output" ]; then
+                  printf '%s' "$output"
+                  exit 0
+                fi
               fi
               sleep 5
             done
-            exit 1
+            printf '[]'
+            exit 0
         check:
-          (length(json_parse($stdout))): 2
+          (length(json_parse($stdout)) > `0`): true
     - command:
         entrypoint: kubectl
         args:

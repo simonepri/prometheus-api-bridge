@@ -41,6 +41,24 @@ spec:
           - apply
           - --filename
           - $BRIDGE_E2E_REPO_DIR/src/tests/ray/workload.yaml
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - |
+            for _ in $(seq 1 60); do
+              if output=$(kubectl get --raw \
+                /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus/sd \
+                2>/dev/null); then
+                if [ -n "$output" ]; then
+                  echo "$output"
+                  exit 0
+                fi
+              fi
+              sleep 2
+            done
+            printf '[]'
+            exit 0
     - assert:
         resource:
           apiVersion: apps/v1

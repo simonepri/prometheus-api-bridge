@@ -30,6 +30,7 @@ spec:
   containers:
     - name: ray
       image: rayproject/ray:2.57.0
+      imagePullPolicy: IfNotPresent
       command:
         - /bin/bash
         - -lc
@@ -37,9 +38,12 @@ spec:
         - >-
           ulimit -n 65536;
           ray start --head --port=6379 --dashboard-host=0.0.0.0
-          --dashboard-port=8265 --include-dashboard=true --num-cpus=1
-          --metrics-export-port=8080 --disable-usage-stats --block
+          --dashboard-port=8265 --include-dashboard=true
+          --dashboard-agent-listen-port=52365 --metrics-export-port=8080
+          --disable-usage-stats --block
       env:
+        - name: RAY_DISABLE_DOCKER_CPU_WARNING
+          value: "1"
         - name: RAY_PROMETHEUS_HOST
           value: http://prometheus-api-bridge-ray.observability.svc:9090
         - name: RAY_PROMETHEUS_NAME
@@ -58,12 +62,30 @@ spec:
       readinessProbe:
         tcpSocket:
           port: dashboard
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 2
+        failureThreshold: 12
+      startupProbe:
+        tcpSocket:
+          port: dashboard
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        failureThreshold: 24
       resources:
         requests:
           cpu: 250m
-          memory: 512Mi
-        limits:
           memory: 1Gi
+        limits:
+          memory: 2Gi
+      volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+  volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
 ---
 apiVersion: v1
 kind: Pod
@@ -76,6 +98,7 @@ spec:
   containers:
     - name: ray
       image: rayproject/ray:2.57.0
+      imagePullPolicy: IfNotPresent
       command:
         - /bin/bash
         - -lc
@@ -83,7 +106,7 @@ spec:
         - >-
           ulimit -n 65536;
           ray start --address=ray-head.ray.svc:6379 --metrics-export-port=8080
-          --num-cpus=1 --disable-usage-stats --block
+          --disable-usage-stats --block
       ports:
         - name: metrics
           containerPort: 8080
@@ -96,3 +119,11 @@ spec:
           memory: 512Mi
         limits:
           memory: 1Gi
+      volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+  volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
