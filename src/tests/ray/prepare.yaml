@@ -50,7 +50,7 @@ spec:
               if output=$(kubectl get --raw \
                 /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus/sd \
                 2>/dev/null); then
-                endpoint_count=$(printf '%s\n' "$output" | grep -o '"__address__"' | wc -l | tr -d ' ')
+                endpoint_count=$(printf '%s\n' "$output" | grep -o ':8080"' | wc -l | tr -d ' ')
                 if [ "${endpoint_count}" -ge 2 ]; then
                   echo "$output"
                   exit 0
