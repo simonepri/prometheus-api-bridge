@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ray
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-head
+  namespace: ray
+spec:
+  selector:
+    app: ray-head
+  ports:
+    - name: gcs
+      port: 6379
+      targetPort: gcs
+    - name: dashboard
+      port: 8265
+      targetPort: dashboard
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ray-head
+  namespace: ray
+  labels:
+    app: ray-head
+spec:
+  containers:
+    - name: ray
+      image: rayproject/ray:2.57.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/bash
+        - -lc
+      args:
+        - >-
+          ulimit -n 65536;
+          ray start --head --node-ip-address="${POD_IP}" --port=6379 --dashboard-host=0.0.0.0
+          --dashboard-port=8265 --include-dashboard=true --num-cpus=1
+          --metrics-export-port=8080
+          --disable-usage-stats --block
+      env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: RAY_DISABLE_DOCKER_CPU_WARNING
+          value: "1"
+        - name: RAY_PROMETHEUS_HOST
+          value: http://prometheus-api-bridge-ray.observability.svc:9090
+        - name: RAY_PROMETHEUS_NAME
+          value: Ray Prometheus API Bridge
+        - name: RAY_GRAFANA_HOST
+          value: http://grafana.grafana.svc:80
+        - name: RAY_GRAFANA_IFRAME_HOST
+          value: http://grafana.grafana.svc:80
+      ports:
+        - name: gcs
+          containerPort: 6379
+        - name: dashboard
+          containerPort: 8265
+        - name: metrics
+          containerPort: 8080
+      readinessProbe:
+        tcpSocket:
+          port: dashboard
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 2
+        failureThreshold: 12
+      resources:
+        requests:
+          cpu: 250m
+          memory: 2Gi
+        limits:
+          memory: 2Gi
+      volumeMounts:
+        - name: shm
+          mountPath: /dev/shm
+  volumes:
+    - name: shm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ray-worker
+  namespace: ray
+  labels:
+    app: ray-worker
+spec:
+  containers:
+    - name: ray
+      image: rayproject/ray:2.57.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/bash
+        - -lc
+      args:
+        - >-
+          ulimit -n 65536;
+          ray start --node-ip-address="${POD_IP}" --address=ray-head.ray.svc:6379 --metrics-export-port=8080
+          --num-cpus=1 --disable-usage-stats --block
+      ports:
+        - name: metrics
+          containerPort: 8080
+      readinessProbe:
+        tcpSocket:
+          port: metrics
+      env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          memory: 1Gi

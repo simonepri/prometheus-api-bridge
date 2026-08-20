@@ -32,6 +32,14 @@ spec:
     - clusters: *e2e-clusters
       cluster: e2e
       use:
+        template: ../ray/prepare.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../ray/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
         template: ../hpa/steps.yaml
     - clusters: *e2e-clusters
       cluster: e2e

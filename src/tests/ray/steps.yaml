@@ -1,0 +1,151 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: ray
+spec:
+  try:
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - |
+            for _ in $(seq 1 30); do
+              if output=$(kubectl get --raw \
+                /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus/sd \
+                2>/dev/null); then
+                endpoint_count=$(printf '%s\n' "$output" | grep -o ':8080"' | wc -l | tr -d ' ')
+                if [ "${endpoint_count}" -ge 2 ]; then
+                  printf '%s' "$output"
+                  exit 0
+                fi
+              fi
+              sleep 5
+            done
+            printf 'Ray service discovery did not expose both endpoints\n' >&2
+            exit 1
+        check:
+          (contains($stdout, '"targets"')): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus_health
+        check:
+          (contains($stdout, 'prometheus running')): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/grafana_health
+        check:
+          (contains($stdout, 'Grafana running')): true
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - |
+            for _ in $(seq 1 30); do
+              output=$(kubectl get --raw \
+                /api/v1/namespaces/observability/services/http:prometheus-api-bridge-ray:9090/proxy/api/v1/query?query=ray_node_cpu_count)
+              if printf '%s\n' "$output" | grep -q '"result":\[{'; then
+                printf '%s' "$output"
+                exit 0
+              fi
+              sleep 5
+            done
+            printf '%s\n' "$output"
+            printf 'Ray metrics did not reach the bridge\n' >&2
+            exit 1
+        check: &ray-instant-query-check
+          (json_parse($stdout).data.resultType): vector
+          (length(json_parse($stdout).data.result) > `0`): true
+    - command:
+        entrypoint: date
+        args:
+          - +%s
+        outputs:
+          - name: rayQueryEnd
+            value: (trim_space($stdout))
+    - command:
+        entrypoint: expr
+        env:
+          - name: RAY_QUERY_END
+            value: ($rayQueryEnd)
+        args:
+          - $RAY_QUERY_END
+          - "-"
+          - "60"
+        outputs:
+          - name: rayQueryStart
+            value: (trim_space($stdout))
+    - command:
+        entrypoint: kubectl
+        env: &ray-range-query-env
+          - name: RAY_QUERY_START
+            value: ($rayQueryStart)
+          - name: RAY_QUERY_END
+            value: ($rayQueryEnd)
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/observability/services/http:prometheus-api-bridge-ray:9090/proxy/api/v1/query_range?query=ray_node_cpu_count&start=$RAY_QUERY_START&end=$RAY_QUERY_END&step=15
+        check:
+          (json_parse($stdout).data.resultType): matrix
+          (length(json_parse($stdout).data.result) > `0`): true
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - --raw
+          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/proxy/uid/ray-prometheus-api-bridge/api/v1/query?query=ray_node_cpu_count
+        check: *ray-instant-query-check
+  catch:
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - pod
+          - ray-head
+          - --namespace
+          - ray
+          - --output
+          - yaml
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - pod
+          - ray-worker
+          - --namespace
+          - ray
+          - --output
+          - yaml
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - kubectl logs --namespace ray ray-head --all-containers --previous || true
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - kubectl logs --namespace ray ray-worker --all-containers --previous || true
+    - events:
+        namespace: ray
+    - events:
+        namespace: grafana
+    - events:
+        namespace: observability
+    - podLogs:
+        namespace: ray
+        selector: app=ray-head
+    - podLogs:
+        namespace: ray
+        selector: app=ray-worker
+    - podLogs:
+        namespace: observability
+        selector: app.kubernetes.io/instance=prometheus-api-bridge-ray
