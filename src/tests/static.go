@@ -235,7 +235,7 @@ func validateRayHTTPServiceDiscoveryRender(outputDir string) error {
 	if !strings.Contains(render, "job_name: ray") ||
 		!strings.Contains(render, "http_sd_configs:") ||
 		!strings.Contains(render, "http://ray-head.ray.svc:8265/api/prometheus/sd") {
-		return fmt.Errorf("Ray HTTP service discovery scrape configuration was not rendered")
+		return fmt.Errorf("ray HTTP service discovery scrape configuration was not rendered")
 	}
 	return nil
 }
