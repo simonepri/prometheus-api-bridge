@@ -101,7 +101,7 @@ spec:
         args:
           - get
           - --raw
-          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/uid/ray-prometheus-api-bridge/api/v1/query?query=ray_node_cpu_count
+          - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/proxy/uid/ray-prometheus-api-bridge/api/v1/query?query=ray_node_cpu_count
         check: *ray-instant-query-check
   catch:
     - command:
