@@ -115,6 +115,12 @@ func chartRenderVariants() []renderVariant {
 			"--set-string", "collection.extraScrapeConfigs[0].job_name=application",
 			"--set-string", "collection.extraScrapeConfigs[0].static_configs[0].targets[0]=application:9090",
 		}},
+		{name: "standalone-ray-http-sd", args: []string{
+			"--set", "collection.mode=standalone",
+			"--set-string", "collection.extraScrapeConfigs[0].job_name=ray",
+			"--set-string", "collection.extraScrapeConfigs[0].http_sd_configs[0].url=http://ray-head.ray.svc:8265/api/prometheus/sd",
+			"--set-string", "collection.extraScrapeConfigs[0].http_sd_configs[0].refresh_interval=30s",
+		}},
 		{name: "consumer-discovery", args: []string{"--set-string", "service.labels.headlamp-prometheus=true"}},
 		{name: "network-policy", args: []string{
 			"--set", "networkPolicy.enabled=true",
@@ -141,6 +147,7 @@ func validateRenderedContracts(
 		func() error { return validateNetworkPolicyRender(outputDir) },
 		func() error { return validateKubernetesStateRender(outputDir) },
 		func() error { return validateExtraScrapeRender(outputDir) },
+		func() error { return validateRayHTTPServiceDiscoveryRender(outputDir) },
 		func() error { return validateExistingRender(outputDir) },
 		func() error { return validateDisabledRender(ctx, r, chartDir) },
 		func() error { return validateAuthenticationRender(ctx, r, chartDir) },
@@ -216,6 +223,19 @@ func validateExtraScrapeRender(outputDir string) error {
 	}
 	if !strings.Contains(render, "job_name: application") || !strings.Contains(render, "application:9090") {
 		return fmt.Errorf("extra Prometheus receiver scrape configuration was not rendered")
+	}
+	return nil
+}
+
+func validateRayHTTPServiceDiscoveryRender(outputDir string) error {
+	render, err := readRender(outputDir, "standalone-ray-http-sd")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(render, "job_name: ray") ||
+		!strings.Contains(render, "http_sd_configs:") ||
+		!strings.Contains(render, "http://ray-head.ray.svc:8265/api/prometheus/sd") {
+		return fmt.Errorf("Ray HTTP service discovery scrape configuration was not rendered")
 	}
 	return nil
 }

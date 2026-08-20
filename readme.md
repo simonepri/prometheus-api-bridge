@@ -85,7 +85,7 @@ flowchart LR
     otel[OpenTelemetry Collector]
     backend["OpenTelemetry backend<br>(e.g. SigNoz)"]
     bridge["Prometheus API Bridge<br>(this project)"]
-    consumers[Headlamp, VPA, KEDA,<br>Grafana, HPA, Argo Rollouts, OpenCost]
+    consumers[Headlamp, VPA, KEDA,<br>Grafana, Ray, HPA, Argo Rollouts, OpenCost]
 
     sources -->|OTLP metrics| otel
     otel -->|OTLP| backend
@@ -160,6 +160,7 @@ Chainsaw assertions behind each tested integration.
 | Vertical Pod Autoscaler | [VPA Prometheus history provider](https://github.com/kubernetes/autoscaler/blob/master/vertical-pod-autoscaler/docs/components.md#running-the-recommender) pointing at the bridge | Resource recommendations from durable usage history | [View configuration](src/tests/vpa/) |
 | KEDA | [KEDA Prometheus scaler](https://keda.sh/docs/2.21/scalers/prometheus/) with its server address set to the bridge | Event-driven scaling from OpenTelemetry metrics | [View configuration](src/tests/keda/) |
 | Grafana | [Grafana Prometheus data source](https://grafana.com/docs/grafana/latest/datasources/prometheus/configure/) provisioned with the bridge URL | Dashboards and ad hoc queries over OpenTelemetry metrics | [View configuration](src/tests/grafana/) |
+| Ray | [Ray Dashboard](https://docs.ray.io/en/latest/cluster/metrics.html) using the bridge as its Prometheus-compatible query API | Ray Dashboard health checks, system metrics, and Grafana-backed time-series views | [View configuration](src/tests/ray/) |
 | Horizontal Pod Autoscaler | [Prometheus Adapter Helm values](https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-adapter) and [metric rules](https://github.com/kubernetes-sigs/prometheus-adapter/blob/master/docs/config.md) targeting the bridge | Kubernetes autoscaling from custom OpenTelemetry metrics | [View configuration](src/tests/hpa/) |
 | Argo Rollouts | [Argo Rollouts Prometheus analysis provider](https://argo-rollouts.readthedocs.io/en/stable/analysis/prometheus/) pointing at the bridge | Metric-driven rollout analysis and promotion | [View configuration](src/tests/argo-rollouts/) |
 | OpenCost | [OpenCost Prometheus data source](https://github.com/opencost/opencost-helm-chart/blob/main/charts/opencost/README.md) configured with the bridge URL | Kubernetes cost allocation without a Prometheus server | [View configuration](src/tests/opencost/) |
@@ -255,6 +256,12 @@ Once the bridge readiness endpoint responds, choose a consumer from the
 configuration** link as the starting point for your deployment. Each reference
 shows the consumer's bridge URL, required metrics, and supporting Kubernetes
 resources.
+
+### Ray Dashboard
+
+See the [Ray integration guide](src/tests/ray/README.md) for collector service
+discovery, Dashboard environment variables, Grafana configuration, and its
+explicit Prometheus compatibility boundaries.
 
 ## Bridge chart configuration
 

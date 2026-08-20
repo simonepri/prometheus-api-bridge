@@ -16,6 +16,10 @@ spec:
           kubeconfig: ../../../.local/e2e/kubeconfig
       cluster: e2e
       use:
+        template: ../ray/prepare.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
         template: ../opencost/prepare.yaml
     - clusters: *e2e-clusters
       cluster: e2e
@@ -29,6 +33,10 @@ spec:
       cluster: e2e
       use:
         template: ../grafana/steps.yaml
+    - clusters: *e2e-clusters
+      cluster: e2e
+      use:
+        template: ../ray/steps.yaml
     - clusters: *e2e-clusters
       cluster: e2e
       use:

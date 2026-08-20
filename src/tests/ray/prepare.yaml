@@ -1,0 +1,86 @@
+# yamllint disable-line rule:line-length
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/v0.2.15/.schemas/json/steptemplate-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: StepTemplate
+metadata:
+  name: prepare-ray-metrics
+spec:
+  try:
+    - command:
+        entrypoint: helm
+        args:
+          - upgrade
+          - --install
+          - prometheus-api-bridge-ray
+          - $BRIDGE_E2E_REPO_DIR/src/chart
+          - --namespace
+          - observability
+          - --set-string
+          - fullnameOverride=prometheus-api-bridge-ray
+          - --set-string
+          - clusterName=$BRIDGE_E2E_METRIC_CLUSTER_NAME
+          - --set-string
+          - server.image.repository=prometheus-api-bridge
+          - --set-string
+          - server.image.tag=e2e
+          - --set-string
+          - server.image.pullPolicy=Never
+          - --set-string
+          - backend.signoz.url=http://signoz.observability.svc:8080
+          - --set-string
+          - backend.signoz.apiKeySecret.name=prometheus-api-bridge-signoz
+          - --values
+          - $BRIDGE_E2E_REPO_DIR/src/tests/ray/values.yaml
+          - --wait
+          - --timeout
+          - 5m
+        timeout: 6m
+    - command:
+        entrypoint: kubectl
+        args:
+          - apply
+          - --filename
+          - $BRIDGE_E2E_REPO_DIR/src/tests/ray/workload.yaml
+    - assert:
+        resource:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: prometheus-api-bridge-ray-collector
+            namespace: observability
+          status:
+            readyReplicas: 1
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: ray-head
+            namespace: ray
+          status:
+            phase: Running
+            (conditions[?type == 'Ready'] | [0].status): "True"
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: ray-worker
+            namespace: ray
+          status:
+            phase: Running
+            (conditions[?type == 'Ready'] | [0].status): "True"
+  catch:
+    - events:
+        namespace: ray
+    - events:
+        namespace: observability
+    - podLogs:
+        namespace: ray
+        selector: app=ray-head
+    - podLogs:
+        namespace: ray
+        selector: app=ray-worker
+    - podLogs:
+        namespace: observability
+        selector: app.kubernetes.io/instance=prometheus-api-bridge-ray

@@ -3,6 +3,8 @@ adminPassword: bridge-e2e
 testFramework:
   enabled: false
 grafana.ini:
+  security:
+    allow_embedding: true
   auth.anonymous:
     enabled: true
     org_role: Admin
@@ -16,6 +18,14 @@ datasources:
         access: proxy
         url: http://prometheus-api-bridge.observability.svc:9090
         isDefault: true
+        editable: false
+        jsonData:
+          httpMethod: POST
+      - name: Ray Prometheus API Bridge
+        uid: ray-prometheus-api-bridge
+        type: prometheus
+        access: proxy
+        url: http://prometheus-api-bridge-ray.observability.svc:9090
         editable: false
         jsonData:
           httpMethod: POST

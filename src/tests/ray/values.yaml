@@ -1,0 +1,23 @@
+server:
+  replicas: 1
+  auth:
+    # The isolated Kind suite follows the existing Headlamp convention. The
+    # production guide requires a bearer token instead.
+    allowUnauthenticated: true
+    bearerTokenSecret:
+      name: ""
+      key: token
+  podDisruptionBudget:
+    enabled: false
+  topologySpread:
+    enabled: false
+
+collection:
+  mode: standalone
+  interval: 5s
+  extraScrapeConfigs:
+    - job_name: ray
+      scrape_interval: 5s
+      http_sd_configs:
+        - url: http://ray-head.ray.svc:8265/api/prometheus/sd
+          refresh_interval: 5s
