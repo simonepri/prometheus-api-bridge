@@ -33,9 +33,12 @@ spec:
       command:
         - /bin/bash
         - -lc
+        - --
       args:
         - >-
-          ray start --head --dashboard-host=0.0.0.0 --dashboard-port=8265
+          ulimit -n 65536;
+          ray start --head --port=6379 --dashboard-host=0.0.0.0
+          --dashboard-port=8265 --include-dashboard=true --num-cpus=1
           --metrics-export-port=8080 --disable-usage-stats --block
       env:
         - name: RAY_PROMETHEUS_HOST
@@ -77,10 +80,12 @@ spec:
       command:
         - /bin/bash
         - -lc
+        - --
       args:
         - >-
+          ulimit -n 65536;
           ray start --address=ray-head.ray.svc:6379 --metrics-export-port=8080
-          --disable-usage-stats --block
+          --num-cpus=1 --disable-usage-stats --block
       ports:
         - name: metrics
           containerPort: 8080
