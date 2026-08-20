@@ -30,15 +30,13 @@ spec:
   containers:
     - name: ray
       image: rayproject/ray:2.57.0
+      command:
+        - /bin/bash
+        - -lc
       args:
-        - ray
-        - start
-        - --head
-        - --dashboard-host=0.0.0.0
-        - --dashboard-port=8265
-        - --metrics-export-port=8080
-        - --disable-usage-stats
-        - --block
+        - >-
+          ray start --head --dashboard-host=0.0.0.0 --dashboard-port=8265
+          --metrics-export-port=8080 --disable-usage-stats --block
       env:
         - name: RAY_PROMETHEUS_HOST
           value: http://prometheus-api-bridge-ray.observability.svc:9090
@@ -76,13 +74,13 @@ spec:
   containers:
     - name: ray
       image: rayproject/ray:2.57.0
+      command:
+        - /bin/bash
+        - -lc
       args:
-        - ray
-        - start
-        - --address=ray-head.ray.svc:6379
-        - --metrics-export-port=8080
-        - --disable-usage-stats
-        - --block
+        - >-
+          ray start --address=ray-head.ray.svc:6379 --metrics-export-port=8080
+          --disable-usage-stats --block
       ports:
         - name: metrics
           containerPort: 8080
