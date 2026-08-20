@@ -44,11 +44,22 @@ spec:
         check:
           (contains($stdout, 'Grafana running')): true
     - command:
-        entrypoint: kubectl
+        entrypoint: /bin/sh
         args:
-          - get
-          - --raw
-          - /api/v1/namespaces/observability/services/http:prometheus-api-bridge-ray:9090/proxy/api/v1/query?query=ray_node_cpu_count
+          - -c
+          - |
+            for _ in $(seq 1 30); do
+              output=$(kubectl get --raw \
+                /api/v1/namespaces/observability/services/http:prometheus-api-bridge-ray:9090/proxy/api/v1/query?query=ray_node_cpu_count)
+              if printf '%s\n' "$output" | grep -q '"result":\[{'; then
+                printf '%s' "$output"
+                exit 0
+              fi
+              sleep 5
+            done
+            printf '%s\n' "$output"
+            printf 'Ray metrics did not reach the bridge\n' >&2
+            exit 1
         check: &ray-instant-query-check
           (json_parse($stdout).data.resultType): vector
           (length(json_parse($stdout).data.result) > `0`): true
