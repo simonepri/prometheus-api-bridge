@@ -7,11 +7,20 @@ metadata:
 spec:
   try:
     - command:
-        entrypoint: kubectl
+        entrypoint: /bin/sh
         args:
-          - get
-          - --raw
-          - /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus/sd
+          - -c
+          - |
+            for _ in $(seq 1 30); do
+              if output=$(kubectl get --raw \
+                /api/v1/namespaces/ray/services/http:ray-head:8265/proxy/api/prometheus/sd \
+                2>/dev/null); then
+                printf '%s' "$output"
+                exit 0
+              fi
+              sleep 5
+            done
+            exit 1
         check:
           (length(json_parse($stdout))): 2
     - command:

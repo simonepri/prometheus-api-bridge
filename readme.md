@@ -257,12 +257,6 @@ configuration** link as the starting point for your deployment. Each reference
 shows the consumer's bridge URL, required metrics, and supporting Kubernetes
 resources.
 
-### Ray Dashboard
-
-See the [Ray integration guide](src/tests/ray/README.md) for collector service
-discovery, Dashboard environment variables, Grafana configuration, and its
-explicit Prometheus compatibility boundaries.
-
 ## Bridge chart configuration
 
 The commented [`values.yaml`](src/chart/values.yaml) is the configuration

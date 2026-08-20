@@ -33,7 +33,6 @@ spec:
       command:
         - /bin/bash
         - -lc
-        - --
       args:
         - >-
           ulimit -n 65536;
@@ -80,7 +79,6 @@ spec:
       command:
         - /bin/bash
         - -lc
-        - --
       args:
         - >-
           ulimit -n 65536;
