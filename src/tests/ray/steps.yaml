@@ -23,8 +23,8 @@ spec:
               fi
               sleep 5
             done
-            printf '[]'
-            exit 0
+            printf 'Ray service discovery did not expose both endpoints\n' >&2
+            exit 1
         check:
           (contains($stdout, '"__address__"')): true
     - command:
@@ -93,6 +93,36 @@ spec:
           - /api/v1/namespaces/grafana/services/http:grafana:80/proxy/api/datasources/uid/ray-prometheus-api-bridge/api/v1/query?query=ray_node_cpu_count
         check: *ray-instant-query-check
   catch:
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - pod
+          - ray-head
+          - --namespace
+          - ray
+          - --output
+          - yaml
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - pod
+          - ray-worker
+          - --namespace
+          - ray
+          - --output
+          - yaml
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - kubectl logs --namespace ray ray-head --all-containers --previous || true
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - kubectl logs --namespace ray ray-worker --all-containers --previous || true
     - events:
         namespace: ray
     - events:

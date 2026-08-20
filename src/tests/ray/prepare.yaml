@@ -58,8 +58,8 @@ spec:
               fi
               sleep 2
             done
-            printf '[]'
-            exit 0
+            printf 'Ray service discovery did not expose both endpoints\n' >&2
+            exit 1
     - assert:
         resource:
           apiVersion: apps/v1
@@ -88,6 +88,36 @@ spec:
           status:
             phase: Running
   catch:
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - pod
+          - ray-head
+          - --namespace
+          - ray
+          - --output
+          - yaml
+    - command:
+        entrypoint: kubectl
+        args:
+          - get
+          - pod
+          - ray-worker
+          - --namespace
+          - ray
+          - --output
+          - yaml
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - kubectl logs --namespace ray ray-head --all-containers --previous || true
+    - command:
+        entrypoint: /bin/sh
+        args:
+          - -c
+          - kubectl logs --namespace ray ray-worker --all-containers --previous || true
     - events:
         namespace: ray
     - events:
