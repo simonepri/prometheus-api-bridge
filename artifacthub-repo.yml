@@ -1,0 +1,7 @@
+# Proves repository ownership for the Artifact Hub listing. The release
+# workflow publishes this file to the chart's OCI repository, which is where
+# Artifact Hub reads it from for OCI-based Helm repositories.
+repositoryID: fb937a6d-6f1a-48bc-901f-98398314606b
+owners:
+  - name: Simone Primarosa
+    email: simone.primarosa@gmail.com
