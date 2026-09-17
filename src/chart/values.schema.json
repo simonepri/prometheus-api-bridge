@@ -26,10 +26,14 @@
     "server": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["affinity", "auth", "discoveryLookback", "image", "maxBackendResponseBytes", "maxConcurrentQueries", "maxMatchersPerRequest", "maxPointsPerSeries", "maxQueryRange", "maxRequestBodyBytes", "maxSamples", "maxSeries", "nodeSelector", "podAnnotations", "podDisruptionBudget", "podLabels", "priorityClassName", "queryTimeout", "replicas", "resources", "strategy", "telemetry", "terminationGracePeriodSeconds", "tolerations", "topologySpread"],
+      "required": ["affinity", "auth", "discoveryLookback", "image", "logLevel", "maxBackendResponseBytes", "maxConcurrentQueries", "maxMatchersPerRequest", "maxPointsPerSeries", "maxQueryRange", "maxRequestBodyBytes", "maxSamples", "maxSeries", "nodeSelector", "podAnnotations", "podDisruptionBudget", "podLabels", "priorityClassName", "queryTimeout", "replicas", "resources", "strategy", "telemetry", "terminationGracePeriodSeconds", "tolerations", "topologySpread"],
       "properties": {
         "image": {"$ref": "#/definitions/image"},
         "replicas": {"type": "integer", "minimum": 1},
+        "logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"]
+        },
         "queryTimeout": {"type": "string", "pattern": "^[1-9][0-9]*(ms|s|m)$"},
         "discoveryLookback": {"type": "string", "pattern": "^[1-9][0-9]*(m|h|d)$"},
         "maxQueryRange": {"type": "string", "pattern": "^[1-9][0-9]*(m|h|d)$"},

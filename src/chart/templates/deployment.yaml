@@ -71,6 +71,8 @@ spec:
               value: {{ .Values.backend.type | quote }}
             - name: BRIDGE_LISTEN_ADDRESS
               value: {{ printf ":%d" (int .Values.service.port) | quote }}
+            - name: BRIDGE_LOG_LEVEL
+              value: {{ .Values.server.logLevel | default "info" | quote }}
             - name: BRIDGE_QUERY_TIMEOUT
               value: {{ .Values.server.queryTimeout | quote }}
             - name: BRIDGE_DISCOVERY_LOOKBACK

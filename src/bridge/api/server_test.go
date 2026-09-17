@@ -603,3 +603,65 @@ func TestNonFiniteQueryParametersAreRejected(t *testing.T) {
 		}
 	}
 }
+
+type recordCaptureHandler struct {
+	records []slog.Record
+}
+
+func (h *recordCaptureHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordCaptureHandler) Handle(_ context.Context, r slog.Record) error {
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *recordCaptureHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordCaptureHandler) WithGroup(string) slog.Handler      { return h }
+
+func TestObserveRequestsLogLevels(t *testing.T) {
+	t.Parallel()
+	handler := &recordCaptureHandler{}
+	logger := slog.New(handler)
+
+	server := NewServer(&fakeQuerier{}, logger, time.Second).Handler()
+
+	req200 := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
+	rec200 := httptest.NewRecorder()
+	server.ServeHTTP(rec200, req200)
+	if rec200.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec200.Code)
+	}
+
+	req400 := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up&time=NaN", nil)
+	rec400 := httptest.NewRecorder()
+	server.ServeHTTP(rec400, req400)
+	if rec400.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec400.Code)
+	}
+
+	failingQuerier := &fakeQuerier{err: errors.New("backend down")}
+	failingServer := NewServer(failingQuerier, logger, time.Second).Handler()
+	req500 := httptest.NewRequest(http.MethodGet, "/api/v1/query?query=up", nil)
+	rec500 := httptest.NewRecorder()
+	failingServer.ServeHTTP(rec500, req500)
+	if rec500.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", rec500.Code)
+	}
+
+	var requestRecords []slog.Record
+	for _, r := range handler.records {
+		if r.Message == "request" {
+			requestRecords = append(requestRecords, r)
+		}
+	}
+	if len(requestRecords) != 3 {
+		t.Fatalf("got %d request records, want 3", len(requestRecords))
+	}
+	if requestRecords[0].Level != slog.LevelDebug {
+		t.Errorf("200 request log level = %v, want LevelDebug", requestRecords[0].Level)
+	}
+	if requestRecords[1].Level != slog.LevelWarn {
+		t.Errorf("400 request log level = %v, want LevelWarn", requestRecords[1].Level)
+	}
+	if requestRecords[2].Level != slog.LevelError {
+		t.Errorf("500 request log level = %v, want LevelError", requestRecords[2].Level)
+	}
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,41 @@ func TestEnvBool(t *testing.T) {
 	t.Setenv("BRIDGE_TEST_BOOL", "sometimes")
 	if _, err := envBool("BRIDGE_TEST_BOOL", false); err == nil {
 		t.Fatal("invalid boolean was accepted")
+	}
+}
+
+func TestEnvLogLevel(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     string
+		fallback  slog.Level
+		want      slog.Level
+		wantError bool
+	}{
+		{name: "empty fallback", value: "", fallback: slog.LevelInfo, want: slog.LevelInfo},
+		{name: "debug", value: "debug", want: slog.LevelDebug},
+		{name: "DEBUG uppercase", value: "DEBUG", want: slog.LevelDebug},
+		{name: "info", value: "info", want: slog.LevelInfo},
+		{name: "warn", value: "warn", want: slog.LevelWarn},
+		{name: "warning", value: "warning", want: slog.LevelWarn},
+		{name: "error", value: "error", want: slog.LevelError},
+		{name: "invalid", value: "verbose", wantError: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("BRIDGE_TEST_LOG_LEVEL", test.value)
+			got, err := envLogLevel("BRIDGE_TEST_LOG_LEVEL", test.fallback)
+			if test.wantError && err == nil {
+				t.Fatal("envLogLevel() expected error, got nil")
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("envLogLevel() unexpected error: %v", err)
+			}
+			if !test.wantError && got != test.want {
+				t.Fatalf("envLogLevel() = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 
@@ -96,6 +132,29 @@ func TestRuntimeConfigRejectsUnreadableBearerTokenFile(t *testing.T) {
 
 	_, err := runtimeConfigFromEnvironment()
 	if err == nil || !strings.Contains(err.Error(), "BRIDGE_BEARER_TOKEN_FILE") {
+		t.Fatalf("runtimeConfigFromEnvironment() error = %v", err)
+	}
+}
+
+func TestRuntimeConfigLoadsLogLevel(t *testing.T) {
+	unsetEnvironment(t, "BRIDGE_LOG_LEVEL")
+	t.Setenv("BRIDGE_LOG_LEVEL", "warn")
+
+	config, err := runtimeConfigFromEnvironment()
+	if err != nil {
+		t.Fatalf("runtimeConfigFromEnvironment() error = %v", err)
+	}
+	if config.logLevel != slog.LevelWarn {
+		t.Fatalf("logLevel = %v, want %v", config.logLevel, slog.LevelWarn)
+	}
+}
+
+func TestRuntimeConfigRejectsInvalidLogLevel(t *testing.T) {
+	unsetEnvironment(t, "BRIDGE_LOG_LEVEL")
+	t.Setenv("BRIDGE_LOG_LEVEL", "invalid")
+
+	_, err := runtimeConfigFromEnvironment()
+	if err == nil || !strings.Contains(err.Error(), "BRIDGE_LOG_LEVEL") {
 		t.Fatalf("runtimeConfigFromEnvironment() error = %v", err)
 	}
 }
