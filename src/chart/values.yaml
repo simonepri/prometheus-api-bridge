@@ -22,6 +22,8 @@ server:
     # tag defaults to Chart.appVersion when empty.
     tag: ""
   replicas: 2
+  # logLevel sets the minimum log severity emitted by the bridge (debug, info, warn, error).
+  logLevel: info
   queryTimeout: 30s
   # discoveryLookback bounds metadata discovery when callers omit start and end.
   discoveryLookback: 1h

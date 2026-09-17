@@ -887,9 +887,11 @@ func (s *Server) observeRequests(next http.Handler) http.Handler {
 		}
 		duration := time.Since(started)
 		s.observer.HTTPRequest(context.WithoutCancel(request.Context()), request.Method, route, status, duration)
-		level := slog.LevelInfo
-		if strings.HasPrefix(request.URL.Path, "/-/") {
-			level = slog.LevelDebug
+		level := slog.LevelDebug
+		if status >= http.StatusInternalServerError {
+			level = slog.LevelError
+		} else if status >= http.StatusBadRequest {
+			level = slog.LevelWarn
 		}
 		s.logger.Log(
 			context.WithoutCancel(request.Context()),

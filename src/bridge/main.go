@@ -39,22 +39,27 @@ type runtimeConfig struct {
 	maxSeries               int
 	maxSamples              int
 	maxBackendResponseBytes int
+	logLevel                slog.Level
 	telemetryEnabled        bool
 	telemetryInterval       time.Duration
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(logger); err != nil {
+	level := new(slog.LevelVar)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	if err := run(logger, level); err != nil {
 		logger.Error("bridge stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run(logger *slog.Logger, level *slog.LevelVar) error {
 	config, err := runtimeConfigFromEnvironment()
 	if err != nil {
 		return err
+	}
+	if level != nil {
+		level.Set(config.logLevel)
 	}
 	client := backendHTTPClient(config.timeout)
 	querier, err := backendFromEnvironment(
@@ -155,6 +160,10 @@ func runtimeConfigFromEnvironment() (runtimeConfig, error) {
 		return runtimeConfig{}, err
 	}
 	config.telemetryInterval, err = envDuration("BRIDGE_TELEMETRY_EXPORT_INTERVAL", 30*time.Second)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	config.logLevel, err = envLogLevel("BRIDGE_LOG_LEVEL", slog.LevelInfo)
 	if err != nil {
 		return runtimeConfig{}, err
 	}
@@ -297,4 +306,23 @@ func envBool(name string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s must be a boolean", name)
 	}
 	return parsed, nil
+}
+
+func envLogLevel(name string, fallback slog.Level) (slog.Level, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback, nil
+	}
+	switch strings.ToLower(value) {
+	case "debug":
+		return slog.LevelDebug, nil
+	case "info":
+		return slog.LevelInfo, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return 0, fmt.Errorf("%s must be one of: debug, info, warn, error", name)
+	}
 }
