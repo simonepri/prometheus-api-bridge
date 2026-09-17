@@ -222,7 +222,7 @@ install a pinned release:
 
 <!-- x-release-please-start-version -->
 ```sh
-helm upgrade --install prometheus-api-bridge oci://ghcr.io/simonepri/charts/prometheus-api-bridge --version 0.2.0 --namespace observability --values values.yaml
+helm upgrade --install prometheus-api-bridge oci://ghcr.io/simonepri/charts/prometheus-api-bridge --version 0.3.0 --namespace observability --values values.yaml
 ```
 <!-- x-release-please-end -->
 
