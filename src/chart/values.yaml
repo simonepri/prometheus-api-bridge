@@ -118,6 +118,8 @@ collection:
     repository: otel/opentelemetry-collector-contrib
     pullPolicy: IfNotPresent
     tag: "0.158.0"
+  # priorityClassName is used only by the chart-owned standalone Collector.
+  priorityClassName: ""
   otlp:
     # endpoint and credentials are used only by the chart-owned standalone Collector.
     endpoint: "http://signoz-otel-collector.observability.svc:4318"
