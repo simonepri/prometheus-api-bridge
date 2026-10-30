@@ -21,6 +21,9 @@ spec:
         {{- include "prometheus-api-bridge.collectorSelectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "prometheus-api-bridge.collectorServiceAccountName" . }}
+      {{- with .Values.collection.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       securityContext:
         fsGroup: 10001
         runAsNonRoot: true
