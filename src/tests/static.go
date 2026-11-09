@@ -105,6 +105,16 @@ func chartRenderVariants() []renderVariant {
 			"--set", "server.telemetry.enabled=true",
 			"--set-string", "server.telemetry.endpoint=http://otel-gateway:4318",
 		}},
+		{name: "standalone-memory-limit", args: []string{
+			"--set", "collection.mode=standalone",
+			"--set", "collection.sources.kubelet.enabled=true",
+			"--set-string", "collection.resources.limits.memory=2Gi",
+		}},
+		{name: "standalone-without-gomemlimit", args: []string{
+			"--set", "collection.mode=standalone",
+			"--set", "collection.sources.kubelet.enabled=true",
+			"--set", "collection.useGOMEMLIMIT=false",
+		}},
 		{name: "standalone-kubernetes-state", args: []string{
 			"--set", "collection.mode=standalone",
 			"--set", "collection.sources.kubeStateMetrics.enabled=true",
@@ -146,6 +156,7 @@ func validateRenderedContracts(
 		func() error { return validateConsumerRender(outputDir) },
 		func() error { return validateNetworkPolicyRender(outputDir) },
 		func() error { return validateKubernetesStateRender(outputDir) },
+		func() error { return validateGoMemLimitRender(outputDir) },
 		func() error { return validateExtraScrapeRender(outputDir) },
 		func() error { return validateRayHTTPServiceDiscoveryRender(outputDir) },
 		func() error { return validateExistingRender(outputDir) },
@@ -212,6 +223,25 @@ func validateKubernetesStateRender(outputDir string) error {
 	}
 	if !strings.Contains(render, "standalone-kubernetes-state-kube-state-metrics.observability.svc:8080") {
 		return fmt.Errorf("bundled kube-state-metrics target is not release-aware")
+	}
+	return nil
+}
+
+func validateGoMemLimitRender(outputDir string) error {
+	limited, err := readRender(outputDir, "standalone-memory-limit")
+	if err != nil {
+		return err
+	}
+	// 80% of 2Gi, so the Go garbage collector reclaims memory before the container limit.
+	if !strings.Contains(limited, "- name: GOMEMLIMIT\n              value: \"1717986918\"") {
+		return fmt.Errorf("standalone Collector does not set GOMEMLIMIT to 80%% of its memory limit")
+	}
+	unlimited, err := readRender(outputDir, "standalone-without-gomemlimit")
+	if err != nil {
+		return err
+	}
+	if strings.Contains(unlimited, "GOMEMLIMIT") {
+		return fmt.Errorf("standalone Collector sets GOMEMLIMIT with useGOMEMLIMIT disabled")
 	}
 	return nil
 }

@@ -54,6 +54,23 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- printf "%s:%s" .Values.collection.image.repository .Values.collection.image.tag }}
 {{- end }}
 
+{{- /*
+collectorGoMemLimit renders 80% of the Collector memory limit in bytes, or nothing when
+useGOMEMLIMIT is off or no memory limit is set.
+*/ -}}
+{{- define "prometheus-api-bridge.collectorGoMemLimit" -}}
+{{- $limit := dig "limits" "memory" "" .Values.collection.resources | toString -}}
+{{- if and .Values.collection.useGOMEMLIMIT $limit -}}
+{{- $number := regexFind "^[0-9]+([.][0-9]+)?" $limit -}}
+{{- $suffix := trimPrefix $number $limit -}}
+{{- $multipliers := dict "" 1 "k" 1000 "M" 1000000 "G" 1000000000 "T" 1000000000000 "Ki" 1024 "Mi" 1048576 "Gi" 1073741824 "Ti" 1099511627776 -}}
+{{- if or (not $number) (not (hasKey $multipliers $suffix)) -}}
+{{- fail (printf "collection.resources.limits.memory %q must be a number with an optional k, M, G, T, Ki, Mi, Gi, or Ti suffix" $limit) -}}
+{{- end -}}
+{{- mulf (float64 $number) (index $multipliers $suffix) 0.8 | floor | int64 -}}
+{{- end -}}
+{{- end }}
+
 {{- define "prometheus-api-bridge.collectorServiceAccountName" -}}
 {{- printf "%s-collector" (include "prometheus-api-bridge.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
