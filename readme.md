@@ -128,6 +128,13 @@ and
 [`/api/v1/query_range`](https://github.com/SigNoz/signoz/blob/v0.137.0/pkg/query-service/app/http_handler.go#L485).
 Both routes are present and tested in SigNoz 0.137.0.
 
+The adapter sends instant queries that return a vector or a scalar to
+`/api/v1/query_range` with the start equal to the end. Prometheus evaluates
+such a query once, at that instant, so the result is identical, and SigNoz
+0.143.0 and later run supported expressions on that route as single
+ClickHouse statements instead of evaluating raw samples in the Go engine.
+Range-selector and string queries keep using `/api/v1/query`.
+
 ### Prometheus API
 
 | Endpoint | Methods | Purpose |

@@ -101,8 +101,11 @@ func TestPrometheusResultFieldOrderIsIgnored(t *testing.T) {
 
 func TestScalarResultTypeAndValueArePreserved(t *testing.T) {
 	t.Parallel()
-	server := prometheusServer(t, func(*http.Request) string {
-		return `{"status":"success","data":{"resultType":"scalar","result":[1700000060,"42"]}}`
+	server := prometheusServer(t, func(request *http.Request) string {
+		if request.URL.Path != queryRangePath {
+			t.Errorf("path = %q, want %q", request.URL.Path, queryRangePath)
+		}
+		return `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1700000060,"42"]]}]}}`
 	})
 
 	client := newTestClient(t, server, Config{})
@@ -114,8 +117,107 @@ func TestScalarResultTypeAndValueArePreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryRange: %v", err)
 	}
-	if result.Type != backend.ResultTypeScalar || result.Scalar == nil || result.Scalar.Value != 42 {
+	if result.Type != backend.ResultTypeScalar || result.Scalar == nil || result.Scalar.Value != 42 || result.Series != nil {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestInstantVectorQueryRunsAsSinglePointRange(t *testing.T) {
+	t.Parallel()
+	expression := `avg(avg_over_time(cpu[1d])) by (pod) / sum(rate(cpu_total[5m])) by (pod)`
+	server := prometheusServer(t, func(request *http.Request) string {
+		if request.URL.Path != queryRangePath {
+			t.Errorf("path = %q, want %q", request.URL.Path, queryRangePath)
+		}
+		assertQuery(t, request.URL.Query(), map[string]string{
+			"query": expression,
+			"start": "2023-11-14T22:14:20Z",
+			"end":   "2023-11-14T22:14:20Z",
+			"step":  "86400",
+		})
+		return `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"pod":"api-0"},"values":[[1700000060,"0.5"]]}]},"warnings":["partial"]}`
+	})
+
+	client := newTestClient(t, server, Config{})
+	result, err := client.QueryRange(context.Background(), backend.Query{
+		Expression: expression,
+		Start:      time.Unix(1_700_000_000, 0),
+		End:        time.Unix(1_700_000_060, 0),
+		Step:       time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("QueryRange: %v", err)
+	}
+	if result.Type != backend.ResultTypeVector || len(result.Series) != 1 || result.Series[0].Labels["pod"] != "api-0" {
+		t.Fatalf("result = %#v", result)
+	}
+	if len(result.Series[0].Points) != 1 || result.Series[0].Points[0].Value != 0.5 {
+		t.Fatalf("points = %#v", result.Series[0].Points)
+	}
+	if len(result.Warnings) != 1 || result.Warnings[0] != "partial" {
+		t.Fatalf("warnings = %#v", result.Warnings)
+	}
+}
+
+func TestInstantQueryStepCoversItsLongestWindow(t *testing.T) {
+	t.Parallel()
+	for expression, want := range map[string]string{
+		`up`:                      "1",
+		`rate(cpu_total[1500ms])`: "2",
+		`max_over_time(rate(cpu_total[5m])[2h:1m])`: "7200",
+	} {
+		server := prometheusServer(t, func(request *http.Request) string {
+			if got := request.URL.Query().Get("step"); got != want {
+				t.Errorf("%s: step = %q, want %q", expression, got, want)
+			}
+			return `{"status":"success","data":{"resultType":"matrix","result":[]}}`
+		})
+		client := newTestClient(t, server, Config{})
+		_, err := client.QueryRange(context.Background(), backend.Query{
+			Expression: expression,
+			End:        time.Unix(1_700_000_060, 0),
+			Step:       time.Minute,
+		})
+		if err != nil {
+			t.Fatalf("%s: QueryRange: %v", expression, err)
+		}
+	}
+}
+
+func TestInstantQueryWithoutRangeFormUsesInstantEndpoint(t *testing.T) {
+	t.Parallel()
+	for _, expression := range []string{`"label"`, `up{`} {
+		server := prometheusServer(t, func(request *http.Request) string {
+			if request.URL.Path != queryPath {
+				t.Errorf("%s: path = %q, want %q", expression, request.URL.Path, queryPath)
+			}
+			return `{"status":"success","data":{"resultType":"vector","result":[]}}`
+		})
+		client := newTestClient(t, server, Config{})
+		_, err := client.QueryRange(context.Background(), backend.Query{
+			Expression: expression,
+			End:        time.Unix(1_700_000_060, 0),
+			Step:       time.Minute,
+		})
+		if err != nil {
+			t.Fatalf("%s: QueryRange: %v", expression, err)
+		}
+	}
+}
+
+func TestSinglePointRangeRejectsExtraPoints(t *testing.T) {
+	t.Parallel()
+	server := prometheusServer(t, func(*http.Request) string {
+		return `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{},"values":[[1700000000,"1"],[1700000060,"2"]]}]}}`
+	})
+	client := newTestClient(t, server, Config{})
+	_, err := client.QueryRange(context.Background(), backend.Query{
+		Expression: "up",
+		End:        time.Unix(1_700_000_060, 0),
+		Step:       time.Minute,
+	})
+	if err == nil {
+		t.Fatal("QueryRange accepted a multi-point result for an instant query")
 	}
 }
 

@@ -107,6 +107,11 @@ func (c *Client) QueryRange(ctx context.Context, query backend.Query) (backend.R
 	if query.Step <= 0 {
 		return backend.Result{}, fmt.Errorf("%w: query step must be positive", backend.ErrUnsupportedQuery)
 	}
+	if !query.RangeQuery {
+		if plan, ok := planInstant(query.Expression); ok {
+			return c.queryInstantAsRange(ctx, query, plan)
+		}
+	}
 	request, err := c.queryRequest(ctx, query)
 	if err != nil {
 		return backend.Result{}, err
