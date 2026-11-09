@@ -37,9 +37,14 @@ spec:
           args:
             - --config=file:/conf/collector.yaml
             - --config=file:/conf/standalone.yaml
-          {{- with .Values.collection.otlp.secretHeaders }}
+          {{- $goMemLimit := include "prometheus-api-bridge.collectorGoMemLimit" . }}
+          {{- if or $goMemLimit .Values.collection.otlp.secretHeaders }}
           env:
-            {{- range $index, $header := . }}
+            {{- with $goMemLimit }}
+            - name: GOMEMLIMIT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- range $index, $header := .Values.collection.otlp.secretHeaders }}
             - name: OTLP_HEADER_{{ $index }}
               valueFrom:
                 secretKeyRef:

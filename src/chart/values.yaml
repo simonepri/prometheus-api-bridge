@@ -163,6 +163,9 @@ collection:
       memory: 128Mi
     limits:
       memory: 512Mi
+  # useGOMEMLIMIT sets GOMEMLIMIT to 80% of resources.limits.memory so the Go garbage collector reclaims
+  # memory before the container reaches its limit; it has no effect without a memory limit.
+  useGOMEMLIMIT: true
 
 # kube-state-metrics is an optional upstream dependency for object metadata collection.
 kube-state-metrics:
