@@ -127,6 +127,15 @@ collection:
     # secretHeaders maps OTLP HTTP headers to Kubernetes Secret keys.
     secretHeaders: []
   interval: 30s
+  # batch bounds each export. OTLP receivers commonly reject request bodies
+  # above 20 MiB, so a scrape that yields tens of thousands of data points, such
+  # as kube-state-metrics on a large cluster, must leave in several requests.
+  batch:
+    # sendBatchSize is the number of data points that triggers an export.
+    sendBatchSize: 8192
+    # sendBatchMaxSize caps the data points in one export, and must not be
+    # below sendBatchSize; 0 removes the cap.
+    sendBatchMaxSize: 8192
   # extraScrapeConfigs appends standard Prometheus receiver scrape jobs. Use it
   # for application exporters whose metrics must be queryable through the bridge.
   extraScrapeConfigs: []

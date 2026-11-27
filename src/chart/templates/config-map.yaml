@@ -18,7 +18,13 @@ data:
             {{- toYaml . | nindent 12 }}
             {{- end }}
     processors:
-      batch/compatibility: {}
+      {{- $batch := .Values.collection.batch }}
+      {{- if and (gt (int $batch.sendBatchMaxSize) 0) (lt (int $batch.sendBatchMaxSize) (int $batch.sendBatchSize)) }}
+      {{- fail "collection.batch.sendBatchMaxSize must be 0 or at least collection.batch.sendBatchSize" }}
+      {{- end }}
+      batch/compatibility:
+        send_batch_size: {{ int $batch.sendBatchSize }}
+        send_batch_max_size: {{ int $batch.sendBatchMaxSize }}
       memory_limiter/compatibility:
         check_interval: 5s
         limit_percentage: 80
