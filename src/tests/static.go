@@ -105,6 +105,12 @@ func chartRenderVariants() []renderVariant {
 			"--set", "server.telemetry.enabled=true",
 			"--set-string", "server.telemetry.endpoint=http://otel-gateway:4318",
 		}},
+		{name: "standalone-batch-uncapped", args: []string{
+			"--set", "collection.mode=standalone",
+			"--set", "collection.sources.kubelet.enabled=true",
+			"--set", "collection.batch.sendBatchSize=1000",
+			"--set", "collection.batch.sendBatchMaxSize=0",
+		}},
 		{name: "standalone-memory-limit", args: []string{
 			"--set", "collection.mode=standalone",
 			"--set", "collection.sources.kubelet.enabled=true",
@@ -157,6 +163,7 @@ func validateRenderedContracts(
 		func() error { return validateNetworkPolicyRender(outputDir) },
 		func() error { return validateKubernetesStateRender(outputDir) },
 		func() error { return validateGoMemLimitRender(outputDir) },
+		func() error { return validateBatchRender(outputDir) },
 		func() error { return validateExtraScrapeRender(outputDir) },
 		func() error { return validateRayHTTPServiceDiscoveryRender(outputDir) },
 		func() error { return validateExistingRender(outputDir) },
@@ -242,6 +249,25 @@ func validateGoMemLimitRender(outputDir string) error {
 	}
 	if strings.Contains(unlimited, "GOMEMLIMIT") {
 		return fmt.Errorf("standalone Collector sets GOMEMLIMIT with useGOMEMLIMIT disabled")
+	}
+	return nil
+}
+
+func validateBatchRender(outputDir string) error {
+	capped, err := readRender(outputDir, "standalone-memory-limit")
+	if err != nil {
+		return err
+	}
+	// A receiver rejects an oversized request whole, so each export must stay bounded by default.
+	if !strings.Contains(capped, "send_batch_size: 8192\n        send_batch_max_size: 8192") {
+		return fmt.Errorf("collector batch processor is not capped at 8192 data points by default")
+	}
+	uncapped, err := readRender(outputDir, "standalone-batch-uncapped")
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(uncapped, "send_batch_size: 1000\n        send_batch_max_size: 0") {
+		return fmt.Errorf("collector batch processor ignores collection.batch overrides")
 	}
 	return nil
 }

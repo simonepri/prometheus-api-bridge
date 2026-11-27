@@ -131,7 +131,7 @@
     "collection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["existing", "extraScrapeConfigs", "image", "interval", "mode", "otlp", "priorityClassName", "rbac", "resources", "sources", "useGOMEMLIMIT"],
+      "required": ["batch", "existing", "extraScrapeConfigs", "image", "interval", "mode", "otlp", "priorityClassName", "rbac", "resources", "sources", "useGOMEMLIMIT"],
       "properties": {
         "mode": {"type": "string", "enum": ["disabled", "existing", "standalone"]},
         "existing": {
@@ -176,6 +176,15 @@
         "priorityClassName": {"$ref": "#/definitions/optionalKubernetesName"},
         "useGOMEMLIMIT": {"type": "boolean"},
         "interval": {"type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$"},
+        "batch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sendBatchSize", "sendBatchMaxSize"],
+          "properties": {
+            "sendBatchSize": {"type": "integer", "minimum": 1},
+            "sendBatchMaxSize": {"type": "integer", "minimum": 0}
+          }
+        },
         "extraScrapeConfigs": {
           "type": "array",
           "items": {"type": "object", "minProperties": 1}

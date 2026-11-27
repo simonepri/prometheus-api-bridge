@@ -254,7 +254,9 @@ curl -fsSG http://localhost:9090/api/v1/query --header "Authorization: Bearer $B
 The bridge can only return metrics present in SigNoz. If the required
 Kubernetes or exporter metrics are missing, use the chart's
 [collection settings](src/chart/values.yaml). The chart can extend an existing
-Collector or install a dedicated one. The
+Collector or install a dedicated one. `collection.batch` caps the data points in
+each export at 8192 by default, so a large scrape never exceeds a receiver's
+request body limit. The
 [existing Collector example](src/tests/collector/existing.yaml) shows how the
 generated configuration is merged into a Collector you already operate.
 
